@@ -7,6 +7,7 @@ const locationSelect = document.getElementById('location-select');
 const refreshBtn = document.getElementById('refresh-btn');
 const alertsSection = document.getElementById('alerts-section');
 const alertsContainer = document.getElementById('alerts-container');
+const schoolDelayContainer = document.getElementById('school-delay-container');
 const currentContainer = document.getElementById('current-container');
 const hourlyContainer = document.getElementById('hourly-container');
 const forecastContainer = document.getElementById('forecast-container');
@@ -47,7 +48,8 @@ async function refreshAllData() {
     loadCurrentConditions(location),
     loadHourlyForecast(location),
     loadForecast(location),
-    loadAlerts()
+    loadAlerts(),
+    loadSchoolDelay()
   ]);
 }
 
@@ -221,6 +223,68 @@ function renderAlerts(data) {
       <p><small>Expires: ${new Date(alert.expires).toLocaleString()}</small></p>
     </div>
   `).join('');
+}
+
+// Load school delay prediction
+async function loadSchoolDelay() {
+  schoolDelayContainer.innerHTML = '<p>Analyzing weather conditions...</p>';
+  schoolDelayContainer.classList.add('loading');
+
+  try {
+    const response = await fetch(`${API_BASE}/schools/delay`);
+    if (!response.ok) throw new Error('Failed to fetch school delay prediction');
+
+    const data = await response.json();
+    schoolDelayContainer.classList.remove('loading');
+    renderSchoolDelay(data);
+  } catch (error) {
+    console.error('Error loading school delay:', error);
+    schoolDelayContainer.classList.remove('loading');
+    schoolDelayContainer.innerHTML = `<div class="error">Unable to load school delay prediction.</div>`;
+  }
+}
+
+// Render school delay prediction
+function renderSchoolDelay(data) {
+  const statusLabels = {
+    minimal: 'Normal Operations Expected',
+    low: 'Low Risk of Delays',
+    moderate: 'Moderate Risk of Delays',
+    high: 'High Risk of Delay/Closure'
+  };
+
+  schoolDelayContainer.innerHTML = `
+    <div class="delay-status">
+      <div class="delay-probability ${data.status}">
+        <div class="percentage">${data.probability}%</div>
+        <div class="label">Delay Chance</div>
+      </div>
+      <div class="delay-info">
+        <div class="status-label ${data.status}">${statusLabels[data.status] || data.status}</div>
+        <div class="recommendation">${data.recommendation}</div>
+      </div>
+    </div>
+
+    <div class="delay-factors">
+      <h4>Contributing Factors</h4>
+      ${data.factors && data.factors.length > 0 ? `
+        <ul>
+          ${data.factors.map(f => `
+            <li>
+              <span>${f.factor}</span>
+              <span class="impact">+${f.impact}%</span>
+            </li>
+          `).join('')}
+        </ul>
+      ` : '<p class="no-factors">No significant weather factors detected</p>'}
+    </div>
+
+    <div class="delay-schools">
+      ${data.schools.map(s => `<span class="school-tag">${s.name}</span>`).join('')}
+    </div>
+
+    <p class="delay-disclaimer">${data.disclaimer}</p>
+  `;
 }
 
 // Helper: Convert wind direction degrees to cardinal
