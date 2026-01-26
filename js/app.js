@@ -280,7 +280,16 @@ function renderSchoolDelay(data) {
     </div>
 
     <div class="delay-schools">
-      ${data.schools.map(s => `<span class="school-tag">${s.name}</span>`).join('')}
+      ${data.schools.map(s => {
+        const statusClass = getStatusClass(s.currentStatus);
+        const statusLabel = getStatusLabel(s.currentStatus);
+        return `
+          <div class="school-status-item">
+            <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
+            <span class="school-current-status ${statusClass}">${statusLabel}</span>
+          </div>
+        `;
+      }).join('')}
     </div>
 
     <p class="delay-disclaimer">${data.disclaimer}</p>
@@ -295,6 +304,30 @@ function getWindDirection(degrees) {
                       'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
   const index = Math.round(degrees / 22.5) % 16;
   return directions[index];
+}
+
+// Helper: Get CSS class for school status
+function getStatusClass(status) {
+  switch (status) {
+    case 'open': return 'status-open';
+    case 'closed': return 'status-closed';
+    case '2-hour delay':
+    case 'delayed': return 'status-delayed';
+    case 'early dismissal': return 'status-early';
+    default: return 'status-unknown';
+  }
+}
+
+// Helper: Get display label for school status
+function getStatusLabel(status) {
+  switch (status) {
+    case 'open': return 'Open';
+    case 'closed': return 'Closed';
+    case '2-hour delay': return '2-Hour Delay';
+    case 'delayed': return 'Delayed';
+    case 'early dismissal': return 'Early Dismissal';
+    default: return 'Checking...';
+  }
 }
 
 // Start the app
