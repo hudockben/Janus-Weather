@@ -152,14 +152,16 @@ async function getHourlyForecast(locationKey = 'indiana') {
 }
 
 async function getAlerts() {
-  const alertsUrl = `${BASE_URL}/alerts/active?area=PA`;
+  // Use Pittsburgh forecast zone for western PA alerts
+  const alertsUrl = `${BASE_URL}/alerts/active?zone=PAZ021,PAZ020,PAZ019,PAZ018`;
   const alerts = await fetchWithRetry(alertsUrl);
 
+  // Filter for Indiana County and surrounding Pittsburgh area
+  const westernPACounties = ['indiana', 'allegheny', 'westmoreland', 'armstrong', 'cambria', 'jefferson', 'clearfield'];
+
   const relevantAlerts = alerts.features.filter(alert => {
-    const areas = alert.properties.areaDesc || '';
-    return areas.toLowerCase().includes('indiana') ||
-           areas.toLowerCase().includes('western pennsylvania') ||
-           (alert.properties.affectedZones || []).some(z => z.includes('PAZ'));
+    const areas = (alert.properties.areaDesc || '').toLowerCase();
+    return westernPACounties.some(county => areas.includes(county));
   });
 
   return {

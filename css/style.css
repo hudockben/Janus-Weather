@@ -67,9 +67,14 @@ section h2 {
   font-size: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.1);
+  background: #1e293b;
   color: #fff;
   cursor: pointer;
+}
+
+.controls select option {
+  background: #1e293b;
+  color: #fff;
 }
 
 .controls select:focus {
