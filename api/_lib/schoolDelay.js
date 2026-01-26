@@ -2,15 +2,173 @@
 // Analyzes weather conditions to estimate delay/closure probability
 
 const INDIANA_COUNTY_SCHOOLS = [
-  { name: 'Indiana Area School District', code: 'IASD' },
-  { name: 'Homer-Center School District', code: 'HCSD' },
-  { name: 'Blairsville-Saltsburg School District', code: 'BSSD' },
-  { name: 'Marion Center Area School District', code: 'MCASD' },
-  { name: 'Penns Manor Area School District', code: 'PMASD' },
-  { name: 'Purchase Line School District', code: 'PLSD' },
-  { name: 'United School District', code: 'USD' },
-  { name: 'IUP (Indiana University of Pennsylvania)', code: 'IUP' }
+  {
+    name: 'Indiana Area School District',
+    code: 'IASD',
+    shortName: 'Indiana Area',
+    website: 'https://www.iasd.cc',
+    statusUrl: 'https://www.iasd.cc',
+    twitter: '@IndianaAreaSD'
+  },
+  {
+    name: 'Homer-Center School District',
+    code: 'HCSD',
+    shortName: 'Homer-Center',
+    website: 'https://www.homercenter.org',
+    statusUrl: 'https://www.homercenter.org',
+    twitter: null
+  },
+  {
+    name: 'Blairsville-Saltsburg School District',
+    code: 'BSSD',
+    shortName: 'Blairsville-Saltsburg',
+    website: 'https://www.b-ssd.org',
+    statusUrl: 'https://www.b-ssd.org',
+    twitter: null
+  },
+  {
+    name: 'Marion Center Area School District',
+    code: 'MCASD',
+    shortName: 'Marion Center',
+    website: 'https://www.mcasd.net',
+    statusUrl: 'https://www.mcasd.net',
+    twitter: null
+  },
+  {
+    name: 'Penns Manor Area School District',
+    code: 'PMASD',
+    shortName: 'Penns Manor',
+    website: 'https://www.pennsmanor.org',
+    statusUrl: 'https://www.pennsmanor.org',
+    twitter: null
+  },
+  {
+    name: 'Purchase Line School District',
+    code: 'PLSD',
+    shortName: 'Purchase Line',
+    website: 'https://www.plsd.k12.pa.us',
+    statusUrl: 'https://www.plsd.k12.pa.us',
+    twitter: null
+  },
+  {
+    name: 'United School District',
+    code: 'USD',
+    shortName: 'United',
+    website: 'https://www.unitedsd.net',
+    statusUrl: 'https://www.unitedsd.net',
+    twitter: null
+  },
+  {
+    name: 'IUP',
+    code: 'IUP',
+    shortName: 'IUP',
+    website: 'https://www.iup.edu',
+    statusUrl: 'https://www.iup.edu/news-events/emergency/',
+    twitter: '@IUPedu'
+  }
 ];
+
+// Status cache to avoid hitting sources too frequently
+let statusCache = {
+  lastUpdated: null,
+  statuses: {}
+};
+
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Check WTAE school closings page (common source for Pittsburgh area)
+async function checkWTAEClosings() {
+  try {
+    const response = await fetch('https://www.wtae.com/weather/closings', {
+      headers: { 'User-Agent': 'JanusForecastModel/1.0' }
+    });
+    if (!response.ok) return null;
+    const html = await response.text();
+    return html;
+  } catch (error) {
+    console.error('Error fetching WTAE closings:', error);
+    return null;
+  }
+}
+
+// Parse school status from various sources
+function parseSchoolStatus(schoolCode, htmlContent) {
+  if (!htmlContent) return 'unknown';
+
+  const lowerHtml = htmlContent.toLowerCase();
+  const schoolPatterns = {
+    'IASD': ['indiana area', 'indiana school'],
+    'HCSD': ['homer-center', 'homer center'],
+    'BSSD': ['blairsville-saltsburg', 'blairsville saltsburg'],
+    'MCASD': ['marion center'],
+    'PMASD': ['penns manor'],
+    'PLSD': ['purchase line'],
+    'USD': ['united school district'],
+    'IUP': ['indiana university of pennsylvania', 'iup']
+  };
+
+  const patterns = schoolPatterns[schoolCode] || [];
+
+  for (const pattern of patterns) {
+    const idx = lowerHtml.indexOf(pattern);
+    if (idx !== -1) {
+      // Look for status keywords near the school name
+      const context = lowerHtml.substring(Math.max(0, idx - 50), idx + 200);
+
+      if (context.includes('closed') || context.includes('closure')) {
+        return 'closed';
+      } else if (context.includes('2 hour') || context.includes('2-hour') || context.includes('two hour')) {
+        return '2-hour delay';
+      } else if (context.includes('delay')) {
+        return 'delayed';
+      } else if (context.includes('early dismissal')) {
+        return 'early dismissal';
+      }
+    }
+  }
+
+  return 'unknown';
+}
+
+// Get current status for all schools
+async function getSchoolStatuses() {
+  const now = Date.now();
+
+  // Return cached statuses if still valid
+  if (statusCache.lastUpdated && (now - statusCache.lastUpdated) < CACHE_DURATION) {
+    return statusCache.statuses;
+  }
+
+  // Try to fetch from WTAE closings page
+  const wtaeHtml = await checkWTAEClosings();
+
+  const statuses = {};
+
+  for (const school of INDIANA_COUNTY_SCHOOLS) {
+    // Try to determine status from WTAE
+    let status = parseSchoolStatus(school.code, wtaeHtml);
+
+    // If no closings found on WTAE, assume normal operations
+    // (In reality, schools not listed usually means they're open)
+    if (status === 'unknown' && wtaeHtml) {
+      status = 'open';
+    }
+
+    statuses[school.code] = {
+      status: status,
+      source: wtaeHtml ? 'WTAE' : 'unavailable',
+      lastChecked: new Date().toISOString()
+    };
+  }
+
+  // Update cache
+  statusCache = {
+    lastUpdated: now,
+    statuses: statuses
+  };
+
+  return statuses;
+}
 
 // Weather condition thresholds for school delays
 const THRESHOLDS = {
@@ -173,5 +331,6 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
 
 module.exports = {
   calculateDelayProbability,
+  getSchoolStatuses,
   INDIANA_COUNTY_SCHOOLS
 };
