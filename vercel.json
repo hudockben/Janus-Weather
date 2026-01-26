@@ -1,8 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/locations", "destination": "/api/locations" },
-    { "source": "/api/alerts", "destination": "/api/alerts" },
-    { "source": "/api/weather/:path*", "destination": "/api/weather/:path*" }
-  ],
-  "outputDirectory": "public"
+    { "source": "/", "destination": "/index.html" }
+  ]
 }
