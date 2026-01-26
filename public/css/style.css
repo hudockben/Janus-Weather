@@ -1,0 +1,368 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  min-height: 100vh;
+  color: #e4e4e4;
+}
+
+header {
+  text-align: center;
+  padding: 2rem 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+header h1 {
+  font-size: 2.5rem;
+  font-weight: 300;
+  letter-spacing: 2px;
+  color: #fff;
+}
+
+header .subtitle {
+  color: #94a3b8;
+  margin-top: 0.5rem;
+  font-size: 1.1rem;
+}
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+section {
+  margin-bottom: 2rem;
+}
+
+section h2 {
+  font-size: 1.3rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.controls label {
+  font-weight: 500;
+}
+
+.controls select {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+}
+
+.controls select:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.controls button {
+  padding: 0.5rem 1.5rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 8px;
+  background: #3b82f6;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.controls button:hover {
+  background: #2563eb;
+}
+
+/* Alerts */
+.alerts {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.alerts.hidden {
+  display: none;
+}
+
+.alerts h2 {
+  color: #fca5a5;
+}
+
+.alert-item {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.alert-item:last-child {
+  margin-bottom: 0;
+}
+
+.alert-item h3 {
+  color: #fca5a5;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.alert-item p {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Current Weather */
+.current-weather .current-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.current-main {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.current-temp {
+  font-size: 5rem;
+  font-weight: 200;
+  color: #fff;
+  line-height: 1;
+}
+
+.current-temp .unit {
+  font-size: 2rem;
+  vertical-align: top;
+}
+
+.current-desc {
+  font-size: 1.5rem;
+  color: #94a3b8;
+}
+
+.current-icon {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
+
+.current-details {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.detail-item {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.detail-item .label {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-item .value {
+  font-size: 1.5rem;
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+.current-meta {
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  color: #64748b;
+  text-align: right;
+}
+
+/* Hourly Forecast */
+.hourly-scroll {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.hourly-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.hourly-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hourly-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.hourly-item {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1rem;
+  text-align: center;
+  min-width: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hourly-item .time {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  margin-bottom: 0.5rem;
+}
+
+.hourly-item .temp {
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+.hourly-item .icon {
+  width: 50px;
+  height: 50px;
+  margin: 0.5rem 0;
+}
+
+.hourly-item .precip {
+  font-size: 0.8rem;
+  color: #60a5fa;
+}
+
+/* 7-Day Forecast */
+.forecast-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.forecast-item {
+  display: grid;
+  grid-template-columns: 120px 60px 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.forecast-item .day {
+  font-weight: 500;
+}
+
+.forecast-item .icon {
+  width: 50px;
+  height: 50px;
+}
+
+.forecast-item .desc {
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
+
+.forecast-item .temp {
+  font-size: 1.3rem;
+  font-weight: 500;
+  text-align: right;
+}
+
+/* Loading State */
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #94a3b8;
+}
+
+/* Error State */
+.error {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+  color: #fca5a5;
+}
+
+/* Footer */
+footer {
+  text-align: center;
+  padding: 2rem;
+  color: #64748b;
+  font-size: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+footer a {
+  color: #60a5fa;
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
+}
+
+footer p + p {
+  margin-top: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  header h1 {
+    font-size: 1.8rem;
+  }
+
+  .current-weather .current-container {
+    grid-template-columns: 1fr;
+  }
+
+  .current-temp {
+    font-size: 3.5rem;
+  }
+
+  .forecast-item {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+  }
+
+  .forecast-item .icon {
+    grid-row: 1 / 3;
+    grid-column: 2;
+  }
+
+  .forecast-item .desc {
+    grid-column: 1;
+  }
+
+  .forecast-item .temp {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+}

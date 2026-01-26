@@ -1,0 +1,16 @@
+{
+  "name": "janus-forecast-model",
+  "version": "1.0.0",
+  "description": "Weather application for Western Pennsylvania using NOAA data",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "keywords": ["weather", "noaa", "pennsylvania", "forecast"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^2.7.0"
+  }
+}

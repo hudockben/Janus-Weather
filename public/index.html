@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Janus Forecast Model - Western PA Weather</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header>
+    <h1>Janus Forecast Model</h1>
+    <p class="subtitle">Western Pennsylvania Weather - Indiana County</p>
+  </header>
+
+  <main>
+    <section class="controls">
+      <label for="location-select">Location:</label>
+      <select id="location-select">
+        <option value="indiana">Indiana</option>
+      </select>
+      <button id="refresh-btn" title="Refresh">Refresh</button>
+    </section>
+
+    <section id="alerts-section" class="alerts hidden">
+      <h2>Active Alerts</h2>
+      <div id="alerts-container"></div>
+    </section>
+
+    <section class="current-weather">
+      <h2>Current Conditions</h2>
+      <div id="current-container" class="loading">
+        <p>Loading weather data...</p>
+      </div>
+    </section>
+
+    <section class="hourly-forecast">
+      <h2>Hourly Forecast</h2>
+      <div id="hourly-container" class="hourly-scroll loading">
+        <p>Loading hourly forecast...</p>
+      </div>
+    </section>
+
+    <section class="forecast">
+      <h2>7-Day Forecast</h2>
+      <div id="forecast-container" class="loading">
+        <p>Loading forecast...</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Data provided by <a href="https://www.weather.gov" target="_blank">NOAA National Weather Service</a></p>
+    <p>Janus Forecast Model &copy; 2025</p>
+  </footer>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
