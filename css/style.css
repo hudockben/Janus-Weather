@@ -127,6 +127,124 @@ section h2 {
 .alert-item h3 {
   color: #fca5a5;
   font-size: 1.1rem;
+}
+
+/* School Delay Section */
+.school-delay {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.school-delay h2 {
+  color: #93c5fd;
+}
+
+.delay-status {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.delay-probability {
+  text-align: center;
+}
+
+.delay-probability .percentage {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.delay-probability .label {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.delay-probability.minimal .percentage { color: #4ade80; }
+.delay-probability.low .percentage { color: #a3e635; }
+.delay-probability.moderate .percentage { color: #fbbf24; }
+.delay-probability.high .percentage { color: #f87171; }
+
+.delay-info {
+  flex: 1;
+}
+
+.delay-info .status-label {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.delay-info .status-label.minimal { color: #4ade80; }
+.delay-info .status-label.low { color: #a3e635; }
+.delay-info .status-label.moderate { color: #fbbf24; }
+.delay-info .status-label.high { color: #f87171; }
+
+.delay-info .recommendation {
+  color: #cbd5e1;
+  font-size: 0.95rem;
+}
+
+.delay-factors {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.delay-factors h4 {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+.delay-factors ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.delay-factors li {
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.delay-factors .impact {
+  color: #f87171;
+  font-weight: 500;
+}
+
+.delay-factors .no-factors {
+  color: #64748b;
+  font-style: italic;
+}
+
+.delay-schools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.delay-schools .school-tag {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: #cbd5e1;
+}
+
+.delay-disclaimer {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-style: italic;
   margin-bottom: 0.5rem;
 }
 
