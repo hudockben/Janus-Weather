@@ -19,14 +19,6 @@ const INDIANA_COUNTY_SCHOOLS = [
     twitter: null
   },
   {
-    name: 'Blairsville-Saltsburg School District',
-    code: 'BSSD',
-    shortName: 'Blairsville-Saltsburg',
-    website: 'https://www.b-ssd.org',
-    statusUrl: 'https://www.b-ssd.org',
-    twitter: null
-  },
-  {
     name: 'Marion Center Area School District',
     code: 'MCASD',
     shortName: 'Marion Center',
@@ -108,7 +100,6 @@ async function checkLocalRadio() {
 const SCHOOL_PATTERNS = {
   'IASD': ['indiana area'],
   'HCSD': ['homer-center', 'homer center'],
-  'BSSD': ['blairsville-saltsburg', 'blairsville saltsburg'],
   'MCASD': ['marion center'],
   'PMASD': ['penns manor'],
   'PLSD': ['purchase line'],
