@@ -256,7 +256,12 @@ function renderSchoolDelay(data) {
     high: 'High Risk of Delay/Closure'
   };
 
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const forecastDate = tomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
   schoolDelayContainer.innerHTML = `
+    <div class="delay-date">Forecast for ${forecastDate}</div>
     <div class="delay-status">
       <div class="delay-probability ${data.status}">
         <div class="percentage">${data.probability}%</div>

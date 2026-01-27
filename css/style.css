@@ -141,6 +141,13 @@ section h2 {
   color: #93c5fd;
 }
 
+.delay-date {
+  font-size: 0.95rem;
+  color: #94a3b8;
+  margin-bottom: 1rem;
+  font-style: italic;
+}
+
 .delay-status {
   display: flex;
   align-items: center;
