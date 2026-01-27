@@ -288,6 +288,7 @@ function renderSchoolDelay(data) {
     </div>
 
     <div class="delay-schools">
+      <div class="schools-date">Current Status — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
       ${data.schools.map(s => {
         const statusClass = getStatusClass(s.currentStatus);
         const statusLabel = getStatusLabel(s.currentStatus);
