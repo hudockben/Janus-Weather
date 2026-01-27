@@ -57,14 +57,6 @@ const INDIANA_COUNTY_SCHOOLS = [
     website: 'https://www.unitedsd.net',
     statusUrl: 'https://www.unitedsd.net',
     twitter: null
-  },
-  {
-    name: 'IUP',
-    code: 'IUP',
-    shortName: 'IUP',
-    website: 'https://www.iup.edu',
-    statusUrl: 'https://www.iup.edu/news-events/emergency/',
-    twitter: '@IUPedu'
   }
 ];
 
@@ -120,8 +112,7 @@ const SCHOOL_PATTERNS = {
   'MCASD': ['marion center'],
   'PMASD': ['penns manor'],
   'PLSD': ['purchase line'],
-  'USD': ['united'],
-  'IUP': ['indiana university of pennsylvania', 'iup']
+  'USD': ['united']
 };
 
 // Parse school status from HTML content
@@ -140,7 +131,7 @@ function parseSchoolStatus(schoolCode, htmlContent) {
 
     // For 'united', avoid false positives (e.g. "United States")
     if (schoolCode === 'USD' && pattern === 'united') {
-      if (!context.includes('united school') && !context.includes('united:') && !context.includes('united -')) {
+      if (context.includes('united states') || context.includes('united nations')) {
         continue;
       }
     }
@@ -188,12 +179,7 @@ async function getSchoolStatuses() {
 
     // If source is available but school not mentioned, assume open
     if (status === 'unknown' && html) {
-      // IUP is not listed on SchoolCast, so leave as unknown
-      if (school.code === 'IUP') {
-        status = 'unknown';
-      } else {
-        status = 'open';
-      }
+      status = 'open';
     }
 
     statuses[school.code] = {
