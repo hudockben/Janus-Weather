@@ -19,14 +19,6 @@ const INDIANA_COUNTY_SCHOOLS = [
     twitter: null
   },
   {
-    name: 'Blairsville-Saltsburg School District',
-    code: 'BSSD',
-    shortName: 'Blairsville-Saltsburg',
-    website: 'https://www.b-ssd.org',
-    statusUrl: 'https://www.b-ssd.org',
-    twitter: null
-  },
-  {
     name: 'Marion Center Area School District',
     code: 'MCASD',
     shortName: 'Marion Center',
@@ -57,14 +49,6 @@ const INDIANA_COUNTY_SCHOOLS = [
     website: 'https://www.unitedsd.net',
     statusUrl: 'https://www.unitedsd.net',
     twitter: null
-  },
-  {
-    name: 'IUP',
-    code: 'IUP',
-    shortName: 'IUP',
-    website: 'https://www.iup.edu',
-    statusUrl: 'https://www.iup.edu/news-events/emergency/',
-    twitter: '@IUPedu'
   }
 ];
 
@@ -76,54 +60,85 @@ let statusCache = {
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// Check WTAE school closings page (common source for Pittsburgh area)
-async function checkWTAEClosings() {
+// Fetch school closings from ARIN IU28 SchoolCast (official source for Indiana County)
+async function checkSchoolCast() {
   try {
-    const response = await fetch('https://www.wtae.com/weather/closings', {
+    const response = await fetch('https://schoolcast.iu28.org', {
       headers: { 'User-Agent': 'JanusForecastModel/1.0' }
     });
     if (!response.ok) return null;
     const html = await response.text();
     return html;
   } catch (error) {
-    console.error('Error fetching WTAE closings:', error);
+    console.error('Error fetching SchoolCast:', error);
     return null;
   }
 }
 
-// Parse school status from various sources
+// Fallback: fetch from local radio station closings pages
+async function checkLocalRadio() {
+  const urls = [
+    'https://www.wccsradio.com/?s=school+closings',
+    'https://www.wdadradio.com/?s=school+closings'
+  ];
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'JanusForecastModel/1.0' }
+      });
+      if (!response.ok) continue;
+      const html = await response.text();
+      if (html) return html;
+    } catch (error) {
+      console.error(`Error fetching ${url}:`, error);
+    }
+  }
+  return null;
+}
+
+// Pattern matching for school names in HTML content
+const SCHOOL_PATTERNS = {
+  'IASD': ['indiana area'],
+  'HCSD': ['homer-center', 'homer center'],
+  'MCASD': ['marion center'],
+  'PMASD': ['penns manor'],
+  'PLSD': ['purchase line'],
+  'USD': ['united']
+};
+
+// Parse school status from HTML content
 function parseSchoolStatus(schoolCode, htmlContent) {
   if (!htmlContent) return 'unknown';
 
   const lowerHtml = htmlContent.toLowerCase();
-  const schoolPatterns = {
-    'IASD': ['indiana area', 'indiana school'],
-    'HCSD': ['homer-center', 'homer center'],
-    'BSSD': ['blairsville-saltsburg', 'blairsville saltsburg'],
-    'MCASD': ['marion center'],
-    'PMASD': ['penns manor'],
-    'PLSD': ['purchase line'],
-    'USD': ['united school district'],
-    'IUP': ['indiana university of pennsylvania', 'iup']
-  };
-
-  const patterns = schoolPatterns[schoolCode] || [];
+  const patterns = SCHOOL_PATTERNS[schoolCode] || [];
 
   for (const pattern of patterns) {
     const idx = lowerHtml.indexOf(pattern);
-    if (idx !== -1) {
-      // Look for status keywords near the school name
-      const context = lowerHtml.substring(Math.max(0, idx - 50), idx + 200);
+    if (idx === -1) continue;
 
-      if (context.includes('closed') || context.includes('closure')) {
-        return 'closed';
-      } else if (context.includes('2 hour') || context.includes('2-hour') || context.includes('two hour')) {
-        return '2-hour delay';
-      } else if (context.includes('delay')) {
-        return 'delayed';
-      } else if (context.includes('early dismissal')) {
-        return 'early dismissal';
+    // Extract context around the match (200 chars after, 50 before)
+    const context = lowerHtml.substring(Math.max(0, idx - 50), idx + 200);
+
+    // For 'united', avoid false positives (e.g. "United States")
+    if (schoolCode === 'USD' && pattern === 'united') {
+      if (context.includes('united states') || context.includes('united nations')) {
+        continue;
       }
+    }
+
+    if (context.includes('closed') || context.includes('closure')) {
+      return 'closed';
+    } else if (context.includes('2 hour') || context.includes('2-hour') || context.includes('two hour') || context.includes('two-hour')) {
+      return '2-hour delay';
+    } else if (context.includes('delay')) {
+      return 'delayed';
+    } else if (context.includes('early dismissal')) {
+      return 'early dismissal';
+    } else if (context.includes('remote learning') || context.includes('remote instruction')) {
+      return 'closed';
+    } else if (context.includes('flexible instruction')) {
+      return 'closed';
     }
   }
 
@@ -139,24 +154,28 @@ async function getSchoolStatuses() {
     return statusCache.statuses;
   }
 
-  // Try to fetch from WTAE closings page
-  const wtaeHtml = await checkWTAEClosings();
+  // Try SchoolCast first (official ARIN IU28 source), then local radio as fallback
+  let html = await checkSchoolCast();
+  let source = 'SchoolCast';
+
+  if (!html) {
+    html = await checkLocalRadio();
+    source = 'Local Radio';
+  }
 
   const statuses = {};
 
   for (const school of INDIANA_COUNTY_SCHOOLS) {
-    // Try to determine status from WTAE
-    let status = parseSchoolStatus(school.code, wtaeHtml);
+    let status = parseSchoolStatus(school.code, html);
 
-    // If no closings found on WTAE, assume normal operations
-    // (In reality, schools not listed usually means they're open)
-    if (status === 'unknown' && wtaeHtml) {
+    // If source is available but school not mentioned, assume open
+    if (status === 'unknown' && html) {
       status = 'open';
     }
 
     statuses[school.code] = {
       status: status,
-      source: wtaeHtml ? 'WTAE' : 'unavailable',
+      source: html ? source : 'unavailable',
       lastChecked: new Date().toISOString()
     };
   }
