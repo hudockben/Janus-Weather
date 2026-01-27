@@ -181,14 +181,17 @@ async function loadForecast(location) {
 function renderForecast(data) {
   forecastContainer.innerHTML = `
     <div class="forecast-grid">
-      ${data.periods.map(period => `
+      ${data.periods.map(period => {
+        const date = new Date(period.startTime);
+        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return `
         <div class="forecast-item">
-          <div class="day">${period.name}</div>
+          <div class="day">${period.name}<span class="date">${dateStr}</span></div>
           <img src="${period.icon}" alt="${period.shortForecast}" class="icon">
           <div class="desc">${period.shortForecast}</div>
           <div class="temp">${period.temperature}°${period.temperatureUnit}</div>
-        </div>
-      `).join('')}
+        </div>`;
+      }).join('')}
     </div>
   `;
 }
@@ -253,7 +256,12 @@ function renderSchoolDelay(data) {
     high: 'High Risk of Delay/Closure'
   };
 
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const forecastDate = tomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
   schoolDelayContainer.innerHTML = `
+    <div class="delay-date">Forecast for ${forecastDate}</div>
     <div class="delay-status">
       <div class="delay-probability ${data.status}">
         <div class="percentage">${data.probability}%</div>
@@ -279,7 +287,25 @@ function renderSchoolDelay(data) {
       ` : '<p class="no-factors">No significant weather factors detected</p>'}
     </div>
 
+    ${data.historicalMatch ? `
+      <div class="historical-match">
+        <h4>Historical Pattern</h4>
+        <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
+        <div class="past-matches">
+          ${data.historicalMatch.topMatches.map(m => `
+            <div class="past-match-item">
+              <span class="past-date">${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              <span class="past-type">${m.type}</span>
+              <span class="past-conditions">${m.temperature}°F / Feels ${m.feelsLike}°F${m.snowfall > 0 ? ` / ${m.snowfall}" snow` : ''}</span>
+              <span class="past-status ${m.status}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
     <div class="delay-schools">
+      <div class="schools-date">Current Status — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
       ${data.schools.map(s => {
         const statusClass = getStatusClass(s.currentStatus);
         const statusLabel = getStatusLabel(s.currentStatus);
