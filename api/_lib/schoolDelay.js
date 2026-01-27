@@ -189,6 +189,77 @@ async function getSchoolStatuses() {
   return statuses;
 }
 
+// Historical data for pattern-based predictions
+const historicalData = require('./historicalData.json');
+
+// Find similar historical days and calculate outcome rates
+function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) {
+  if (!historicalData || historicalData.length === 0) return null;
+
+  // Score each historical record by similarity to current conditions
+  const scored = historicalData.map(record => {
+    let similarity = 0;
+
+    // Temperature similarity (within 10°F = good match)
+    const tempDiff = Math.abs(record.temperature - temperature);
+    if (tempDiff <= 5) similarity += 3;
+    else if (tempDiff <= 10) similarity += 2;
+    else if (tempDiff <= 15) similarity += 1;
+
+    // Feels-like similarity
+    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
+    if (feelsDiff <= 5) similarity += 3;
+    else if (feelsDiff <= 10) similarity += 2;
+    else if (feelsDiff <= 15) similarity += 1;
+
+    // Snowfall similarity
+    const snowDiff = Math.abs(record.snowfall - snowfall);
+    if (snowDiff <= 0.5) similarity += 3;
+    else if (snowDiff <= 2) similarity += 2;
+    else if (snowDiff <= 4) similarity += 1;
+
+    // Weather type match
+    const currentType = (weatherType || '').toLowerCase();
+    const recordType = (record.type || '').toLowerCase();
+    if (currentType && recordType && currentType === recordType) similarity += 4;
+    else if (currentType && recordType &&
+             (currentType.includes(recordType) || recordType.includes(currentType))) similarity += 2;
+
+    return { ...record, similarity };
+  });
+
+  // Filter to reasonably similar days (similarity >= 5)
+  const similar = scored.filter(r => r.similarity >= 5)
+                        .sort((a, b) => b.similarity - a.similarity);
+
+  if (similar.length === 0) return null;
+
+  // Take the top matches (up to 8)
+  const matches = similar.slice(0, 8);
+
+  const closedCount = matches.filter(r => r.status === 'closed').length;
+  const delayCount = matches.filter(r => r.status === 'delay').length;
+  const totalDisruptions = closedCount + delayCount;
+  const disruptionRate = Math.round((totalDisruptions / matches.length) * 100);
+  const closureRate = Math.round((closedCount / matches.length) * 100);
+
+  return {
+    matchCount: matches.length,
+    closedCount,
+    delayCount,
+    disruptionRate,
+    closureRate,
+    topMatches: matches.slice(0, 3).map(m => ({
+      date: m.date,
+      status: m.status,
+      temperature: m.temperature,
+      feelsLike: m.feelsLike,
+      snowfall: m.snowfall,
+      type: m.type
+    }))
+  };
+}
+
 // Weather condition thresholds for school delays
 const THRESHOLDS = {
   // Temperature thresholds (Fahrenheit)
@@ -314,6 +385,44 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     });
   }
 
+  // Historical pattern analysis
+  let historicalMatch = null;
+  if (currentConditions && currentConditions.temperature) {
+    const tempF = currentConditions.temperature.fahrenheit;
+    const windMph = currentConditions.windSpeed?.mph || 0;
+    let windChill = tempF;
+    if (tempF <= 50 && windMph > 3) {
+      windChill = 35.74 + (0.6215 * tempF) - (35.75 * Math.pow(windMph, 0.16)) + (0.4275 * tempF * Math.pow(windMph, 0.16));
+      windChill = Math.round(windChill);
+    }
+
+    // Determine snowfall estimate from forecast text
+    let snowEstimate = 0;
+    let weatherType = '';
+    if (forecast && forecast.periods) {
+      const relevantText = forecast.periods.slice(0, 4)
+        .map(p => (p.detailedForecast || p.shortForecast || '').toLowerCase()).join(' ');
+      const snowMatch = relevantText.match(/(\d+)\s*(?:to\s*(\d+))?\s*inch/);
+      if (snowMatch) snowEstimate = snowMatch[2] ? parseInt(snowMatch[2]) : parseInt(snowMatch[1]);
+      if (relevantText.includes('ice') || relevantText.includes('freezing rain')) weatherType = 'ice';
+      else if (relevantText.includes('snow')) weatherType = 'snow';
+      else if (windChill <= 10) weatherType = 'frigid temperature';
+    }
+
+    historicalMatch = getHistoricalPrediction(tempF, windChill, snowEstimate, weatherType);
+
+    if (historicalMatch) {
+      // Blend historical data with threshold-based probability
+      // Weight: 40% historical, 60% threshold-based
+      const historicalProb = historicalMatch.disruptionRate;
+      probability = Math.round((probability * 0.6) + (historicalProb * 0.4));
+      factors.push({
+        factor: `Historical pattern (${historicalMatch.matchCount} similar days: ${historicalMatch.closedCount} closed, ${historicalMatch.delayCount} delayed)`,
+        impact: Math.round(historicalProb * 0.4)
+      });
+    }
+  }
+
   // Cap probability at 95% (never 100% certain)
   probability = Math.min(probability, 95);
 
@@ -343,8 +452,9 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     status,
     recommendation,
     factors: uniqueFactors,
+    historicalMatch,
     schools: INDIANA_COUNTY_SCHOOLS,
-    disclaimer: 'This is an estimate based on weather conditions. Always check official school district announcements for actual delay/closure information.'
+    disclaimer: 'This is an estimate based on weather conditions and historical patterns. Always check official school district announcements for actual delay/closure information.'
   };
 }
 

@@ -287,6 +287,23 @@ function renderSchoolDelay(data) {
       ` : '<p class="no-factors">No significant weather factors detected</p>'}
     </div>
 
+    ${data.historicalMatch ? `
+      <div class="historical-match">
+        <h4>Historical Pattern</h4>
+        <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
+        <div class="past-matches">
+          ${data.historicalMatch.topMatches.map(m => `
+            <div class="past-match-item">
+              <span class="past-date">${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              <span class="past-type">${m.type}</span>
+              <span class="past-conditions">${m.temperature}°F / Feels ${m.feelsLike}°F${m.snowfall > 0 ? ` / ${m.snowfall}" snow` : ''}</span>
+              <span class="past-status ${m.status}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
     <div class="delay-schools">
       <div class="schools-date">Current Status — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
       ${data.schools.map(s => {

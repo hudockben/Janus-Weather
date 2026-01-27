@@ -240,6 +240,87 @@ section h2 {
   margin-bottom: 1rem;
 }
 
+.historical-match {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.historical-match h4 {
+  color: #93c5fd;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.historical-match p {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.past-matches {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.past-match-item {
+  display: grid;
+  grid-template-columns: 100px 130px 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.past-date {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.past-type {
+  color: #94a3b8;
+  text-transform: capitalize;
+}
+
+.past-conditions {
+  color: #94a3b8;
+}
+
+.past-status {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+}
+
+.past-status.closed {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.past-status.delay {
+  color: #fdba74;
+  background: rgba(249, 115, 22, 0.15);
+}
+
+@media (max-width: 768px) {
+  .past-match-item {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .past-status {
+    justify-self: end;
+  }
+}
+
 .schools-date {
   grid-column: 1 / -1;
   font-size: 0.9rem;
