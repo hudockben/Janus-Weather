@@ -181,14 +181,17 @@ async function loadForecast(location) {
 function renderForecast(data) {
   forecastContainer.innerHTML = `
     <div class="forecast-grid">
-      ${data.periods.map(period => `
+      ${data.periods.map(period => {
+        const date = new Date(period.startTime);
+        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return `
         <div class="forecast-item">
-          <div class="day">${period.name}</div>
+          <div class="day">${period.name}<span class="date">${dateStr}</span></div>
           <img src="${period.icon}" alt="${period.shortForecast}" class="icon">
           <div class="desc">${period.shortForecast}</div>
           <div class="temp">${period.temperature}°${period.temperatureUnit}</div>
-        </div>
-      `).join('')}
+        </div>`;
+      }).join('')}
     </div>
   `;
 }

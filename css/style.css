@@ -449,6 +449,13 @@ section h2 {
   font-weight: 500;
 }
 
+.forecast-item .day .date {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
 .forecast-item .icon {
   width: 50px;
   height: 50px;
