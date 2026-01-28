@@ -138,7 +138,7 @@ function parseSchoolStatus(schoolCode, htmlContent) {
     } else if (context.includes('remote learning') || context.includes('remote instruction')) {
       return 'closed';
     } else if (context.includes('flexible instruction')) {
-      return 'closed';
+      return 'flexible instruction';
     }
   }
 
