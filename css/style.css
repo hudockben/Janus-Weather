@@ -6,9 +6,9 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  background: linear-gradient(135deg, #1a2927 0%, #1e3330 50%, #0f4d46 100%);
   min-height: 100vh;
-  color: #e4e4e4;
+  color: #E5E7EB;
 }
 
 header {
@@ -26,7 +26,7 @@ header h1 {
 }
 
 header .subtitle {
-  color: #94a3b8;
+  color: #E5E7EB;
   margin-top: 0.5rem;
   font-size: 1.1rem;
 }
@@ -45,7 +45,7 @@ section h2 {
   font-size: 1.3rem;
   font-weight: 500;
   margin-bottom: 1rem;
-  color: #94a3b8;
+  color: #E5E7EB;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -67,19 +67,19 @@ section h2 {
   font-size: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
-  background: #1e293b;
+  background: #1e3330;
   color: #fff;
   cursor: pointer;
 }
 
 .controls select option {
-  background: #1e293b;
+  background: #1e3330;
   color: #fff;
 }
 
 .controls select:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: #5FB3A2;
 }
 
 .controls button {
@@ -87,14 +87,14 @@ section h2 {
   font-size: 1rem;
   border: none;
   border-radius: 8px;
-  background: #3b82f6;
+  background: #5FB3A2;
   color: #fff;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .controls button:hover {
-  background: #2563eb;
+  background: #4a9a8b;
 }
 
 /* Alerts */
@@ -189,19 +189,19 @@ section h2 {
 
 /* School Delay Section */
 .school-delay {
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(95, 179, 162, 0.1);
+  border: 1px solid rgba(95, 179, 162, 0.3);
   border-radius: 12px;
   padding: 1.5rem;
 }
 
 .school-delay h2 {
-  color: #93c5fd;
+  color: #7fcfc0;
 }
 
 .delay-date {
   font-size: 0.95rem;
-  color: #94a3b8;
+  color: #E5E7EB;
   margin-bottom: 1rem;
   font-style: italic;
 }
@@ -225,7 +225,7 @@ section h2 {
 
 .delay-probability .label {
   font-size: 0.85rem;
-  color: #94a3b8;
+  color: #E5E7EB;
   text-transform: uppercase;
 }
 
@@ -250,7 +250,7 @@ section h2 {
 .delay-info .status-label.high { color: #f87171; }
 
 .delay-info .recommendation {
-  color: #cbd5e1;
+  color: #E5E7EB;
   font-size: 0.95rem;
 }
 
@@ -263,14 +263,14 @@ section h2 {
 
 .delay-factors h4 {
   font-size: 0.9rem;
-  color: #94a3b8;
+  color: #E5E7EB;
   margin-bottom: 0.25rem;
   text-transform: uppercase;
 }
 
 .delay-factors .factors-explanation {
   font-size: 0.8rem;
-  color: #64748b;
+  color: #B8C0C8;
   margin-bottom: 0.5rem;
 }
 
@@ -293,7 +293,7 @@ section h2 {
 }
 
 .delay-factors .no-factors {
-  color: #64748b;
+  color: #B8C0C8;
   font-style: italic;
 }
 
@@ -313,7 +313,7 @@ section h2 {
 }
 
 .historical-match h4 {
-  color: #93c5fd;
+  color: #7fcfc0;
   text-transform: uppercase;
   font-size: 0.85rem;
   letter-spacing: 0.05em;
@@ -321,7 +321,7 @@ section h2 {
 }
 
 .historical-match p {
-  color: #94a3b8;
+  color: #E5E7EB;
   font-size: 0.9rem;
   margin-bottom: 0.75rem;
 }
@@ -348,12 +348,12 @@ section h2 {
 }
 
 .past-type {
-  color: #94a3b8;
+  color: #E5E7EB;
   text-transform: capitalize;
 }
 
 .past-conditions {
-  color: #94a3b8;
+  color: #E5E7EB;
 }
 
 .past-status {
@@ -388,7 +388,7 @@ section h2 {
 .schools-date {
   grid-column: 1 / -1;
   font-size: 0.9rem;
-  color: #94a3b8;
+  color: #E5E7EB;
   font-style: italic;
   margin-bottom: 0.25rem;
 }
@@ -411,7 +411,7 @@ section h2 {
 }
 
 .school-status-item .school-name:hover {
-  color: #60a5fa;
+  color: #5FB3A2;
   text-decoration: underline;
 }
 
@@ -450,13 +450,13 @@ section h2 {
 }
 
 .status-unknown {
-  background: rgba(148, 163, 184, 0.2);
-  color: #94a3b8;
+  background: rgba(229, 231, 235, 0.2);
+  color: #E5E7EB;
 }
 
 .delay-disclaimer {
   font-size: 0.8rem;
-  color: #64748b;
+  color: #B8C0C8;
   font-style: italic;
   margin-bottom: 0.5rem;
 }
@@ -497,7 +497,7 @@ section h2 {
 
 .current-desc {
   font-size: 1.5rem;
-  color: #94a3b8;
+  color: #E5E7EB;
 }
 
 .current-icon {
@@ -520,7 +520,7 @@ section h2 {
 
 .detail-item .label {
   font-size: 0.85rem;
-  color: #94a3b8;
+  color: #E5E7EB;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -534,7 +534,7 @@ section h2 {
 .current-meta {
   grid-column: 1 / -1;
   font-size: 0.85rem;
-  color: #64748b;
+  color: #B8C0C8;
   text-align: right;
 }
 
@@ -573,7 +573,7 @@ section h2 {
 
 .hourly-item .time {
   font-size: 0.9rem;
-  color: #94a3b8;
+  color: #E5E7EB;
   margin-bottom: 0.5rem;
 }
 
@@ -590,7 +590,7 @@ section h2 {
 
 .hourly-item .precip {
   font-size: 0.8rem;
-  color: #60a5fa;
+  color: #5FB3A2;
 }
 
 /* 7-Day Forecast */
@@ -618,7 +618,7 @@ section h2 {
   display: block;
   font-size: 0.8rem;
   font-weight: 400;
-  color: #94a3b8;
+  color: #E5E7EB;
 }
 
 .forecast-item .icon {
@@ -627,7 +627,7 @@ section h2 {
 }
 
 .forecast-item .desc {
-  color: #94a3b8;
+  color: #E5E7EB;
   font-size: 0.95rem;
 }
 
@@ -641,7 +641,7 @@ section h2 {
 .loading {
   text-align: center;
   padding: 3rem;
-  color: #94a3b8;
+  color: #E5E7EB;
 }
 
 /* Error State */
@@ -658,13 +658,13 @@ section h2 {
 footer {
   text-align: center;
   padding: 2rem;
-  color: #64748b;
+  color: #B8C0C8;
   font-size: 0.9rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 footer a {
-  color: #60a5fa;
+  color: #5FB3A2;
   text-decoration: none;
 }
 
