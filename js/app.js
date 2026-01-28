@@ -6,7 +6,9 @@ const API_BASE = '/api';
 const locationSelect = document.getElementById('location-select');
 const refreshBtn = document.getElementById('refresh-btn');
 const alertsSection = document.getElementById('alerts-section');
+const alertsHeader = document.getElementById('alerts-header');
 const alertsContainer = document.getElementById('alerts-container');
+const alertsCount = document.getElementById('alerts-count');
 const schoolDelayContainer = document.getElementById('school-delay-container');
 const currentContainer = document.getElementById('current-container');
 const hourlyContainer = document.getElementById('hourly-container');
@@ -21,8 +23,17 @@ async function init() {
   locationSelect.addEventListener('change', refreshAllData);
   refreshBtn.addEventListener('click', refreshAllData);
 
+  // Alerts collapsible toggle
+  alertsHeader.addEventListener('click', toggleAlerts);
+
   // Auto-refresh every 10 minutes
   setInterval(refreshAllData, 600000);
+}
+
+// Toggle alerts section expanded/collapsed
+function toggleAlerts() {
+  alertsHeader.classList.toggle('collapsed');
+  alertsContainer.classList.toggle('collapsed');
 }
 
 // Load available locations
@@ -214,10 +225,12 @@ async function loadAlerts() {
 function renderAlerts(data) {
   if (data.count === 0) {
     alertsSection.classList.add('hidden');
+    alertsCount.textContent = '';
     return;
   }
 
   alertsSection.classList.remove('hidden');
+  alertsCount.textContent = data.count;
   alertsContainer.innerHTML = data.alerts.map(alert => `
     <div class="alert-item">
       <h3>${alert.event}</h3>
