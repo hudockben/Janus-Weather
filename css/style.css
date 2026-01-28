@@ -438,6 +438,11 @@ section h2 {
   color: #fb923c;
 }
 
+.status-flexible {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
 .status-unknown {
   background: rgba(148, 163, 184, 0.2);
   color: #94a3b8;

@@ -353,6 +353,8 @@ function getStatusClass(status) {
     case '2-hour delay':
     case 'delayed': return 'status-delayed';
     case 'early dismissal': return 'status-early';
+    case 'flexible instruction':
+    case 'flexible instruction day': return 'status-flexible';
     default: return 'status-unknown';
   }
 }
@@ -365,6 +367,8 @@ function getStatusLabel(status) {
     case '2-hour delay': return '2-Hour Delay';
     case 'delayed': return 'Delayed';
     case 'early dismissal': return 'Early Dismissal';
+    case 'flexible instruction':
+    case 'flexible instruction day': return 'Flexible Instruction';
     default: return 'Checking...';
   }
 }
