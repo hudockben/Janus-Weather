@@ -3,7 +3,6 @@
 const API_BASE = '/api';
 
 // DOM Elements
-const refreshBtn = document.getElementById('refresh-btn');
 const alertsSection = document.getElementById('alerts-section');
 const alertsHeader = document.getElementById('alerts-header');
 const alertsContainer = document.getElementById('alerts-container');
@@ -16,9 +15,6 @@ const forecastContainer = document.getElementById('forecast-container');
 // Initialize
 async function init() {
   await refreshAllData();
-
-  // Event listeners
-  refreshBtn.addEventListener('click', refreshAllData);
 
   // Alerts collapsible toggle
   alertsHeader.addEventListener('click', toggleAlerts);
@@ -271,7 +267,7 @@ function renderSchoolDelay(data) {
 
     <div class="delay-factors">
       <h4>Contributing Factors</h4>
-      <p class="factors-explanation">Each factor adds to the overall delay/closure probability</p>
+      <p class="factors-explanation">Weighted system - percentages show relative impact, not a simple sum</p>
       ${data.factors && data.factors.length > 0 ? `
         <ul>
           ${data.factors.map(f => `
