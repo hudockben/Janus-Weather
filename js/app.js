@@ -3,7 +3,6 @@
 const API_BASE = '/api';
 
 // DOM Elements
-const locationSelect = document.getElementById('location-select');
 const refreshBtn = document.getElementById('refresh-btn');
 const alertsSection = document.getElementById('alerts-section');
 const alertsHeader = document.getElementById('alerts-header');
@@ -16,11 +15,9 @@ const forecastContainer = document.getElementById('forecast-container');
 
 // Initialize
 async function init() {
-  await loadLocations();
   await refreshAllData();
 
   // Event listeners
-  locationSelect.addEventListener('change', refreshAllData);
   refreshBtn.addEventListener('click', refreshAllData);
 
   // Alerts collapsible toggle
@@ -36,23 +33,9 @@ function toggleAlerts() {
   alertsContainer.classList.toggle('collapsed');
 }
 
-// Load available locations
-async function loadLocations() {
-  try {
-    const response = await fetch(`${API_BASE}/locations`);
-    const locations = await response.json();
-
-    locationSelect.innerHTML = locations
-      .map(loc => `<option value="${loc.key}">${loc.name}</option>`)
-      .join('');
-  } catch (error) {
-    console.error('Error loading locations:', error);
-  }
-}
-
 // Refresh all weather data
 async function refreshAllData() {
-  const location = locationSelect.value;
+  const location = 'indiana';
 
   // Load all data in parallel
   await Promise.all([
@@ -288,6 +271,7 @@ function renderSchoolDelay(data) {
 
     <div class="delay-factors">
       <h4>Contributing Factors</h4>
+      <p class="factors-explanation">Each factor adds to the overall delay/closure probability</p>
       ${data.factors && data.factors.length > 0 ? `
         <ul>
           ${data.factors.map(f => `
