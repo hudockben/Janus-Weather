@@ -192,13 +192,48 @@ async function getSchoolStatuses() {
 // Historical data for pattern-based predictions
 const historicalData = require('./historicalData.json');
 
+// Categorize a weather event based on snowfall and type
+function categorizeEvent(snow, type) {
+  const typeLower = (type || '').toLowerCase();
+  if (typeLower.includes('ice') || typeLower.includes('freezing')) return 'ice';
+  if (snow >= 3) return 'heavy-snow';
+  if (snow >= 1) return 'light-snow';
+  if (typeLower.includes('snow') || typeLower.includes('flurr')) return 'light-snow';
+  return 'cold-only';
+}
+
 // Find similar historical days and calculate outcome rates
 function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) {
   if (!historicalData || historicalData.length === 0) return null;
 
+  const currentCategory = categorizeEvent(snowfall, weatherType);
+
   // Score each historical record by similarity to current conditions
   const scored = historicalData.map(record => {
     let similarity = 0;
+
+    const recordCategory = categorizeEvent(record.snowfall, record.type);
+
+    // DISQUALIFY: If snowfall difference is too large (>5 inches), skip this record
+    // A day with 0" snow should never match a day with 6"+ snow
+    const snowDiff = Math.abs(record.snowfall - snowfall);
+    if (snowDiff > 5) {
+      return { ...record, similarity: 0, disqualified: true };
+    }
+
+    // Category matching - critical for finding truly similar days
+    if (currentCategory === recordCategory) {
+      similarity += 4; // Bonus for matching category
+    } else if (
+      (currentCategory === 'cold-only' && recordCategory === 'heavy-snow') ||
+      (currentCategory === 'heavy-snow' && recordCategory === 'cold-only')
+    ) {
+      // Completely different event types - strong penalty
+      similarity -= 6;
+    } else {
+      // Adjacent categories (e.g., cold-only vs light-snow) - moderate penalty
+      similarity -= 2;
+    }
 
     // Temperature similarity (within 10°F = good match)
     const tempDiff = Math.abs(record.temperature - temperature);
@@ -212,24 +247,25 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
     else if (feelsDiff <= 10) similarity += 2;
     else if (feelsDiff <= 15) similarity += 1;
 
-    // Snowfall similarity
-    const snowDiff = Math.abs(record.snowfall - snowfall);
-    if (snowDiff <= 0.5) similarity += 3;
+    // Snowfall similarity - stricter scoring
+    if (snowDiff <= 0.5) similarity += 4;
+    else if (snowDiff <= 1) similarity += 3;
     else if (snowDiff <= 2) similarity += 2;
-    else if (snowDiff <= 4) similarity += 1;
+    else if (snowDiff <= 3) similarity += 1;
+    // No points for snowDiff > 3
 
-    // Weather type match
+    // Weather type match (reduced weight since category matching handles this)
     const currentType = (weatherType || '').toLowerCase();
     const recordType = (record.type || '').toLowerCase();
-    if (currentType && recordType && currentType === recordType) similarity += 4;
+    if (currentType && recordType && currentType === recordType) similarity += 2;
     else if (currentType && recordType &&
-             (currentType.includes(recordType) || recordType.includes(currentType))) similarity += 2;
+             (currentType.includes(recordType) || recordType.includes(currentType))) similarity += 1;
 
     return { ...record, similarity };
   });
 
-  // Filter to reasonably similar days (similarity >= 5)
-  const similar = scored.filter(r => r.similarity >= 5)
+  // Filter to reasonably similar days (similarity >= 5) and not disqualified
+  const similar = scored.filter(r => !r.disqualified && r.similarity >= 5)
                         .sort((a, b) => b.similarity - a.similarity);
 
   if (similar.length === 0) return null;
