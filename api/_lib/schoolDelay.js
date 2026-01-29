@@ -630,15 +630,22 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
   } else {
     // No historical data - use heuristics based on severity
     // Higher probabilities lean toward closure, lower toward delay
-    if (probability >= 70) {
-      closureProbability = Math.round(probability * 0.6);
-      delayProbability = Math.round(probability * 0.4);
+    // Using 5 tiers to reduce large swings when crossing boundaries
+    if (probability >= 85) {
+      closureProbability = Math.round(probability * 0.65);
+      delayProbability = Math.round(probability * 0.35);
+    } else if (probability >= 70) {
+      closureProbability = Math.round(probability * 0.55);
+      delayProbability = Math.round(probability * 0.45);
+    } else if (probability >= 55) {
+      closureProbability = Math.round(probability * 0.45);
+      delayProbability = Math.round(probability * 0.55);
     } else if (probability >= 40) {
-      closureProbability = Math.round(probability * 0.4);
-      delayProbability = Math.round(probability * 0.6);
+      closureProbability = Math.round(probability * 0.35);
+      delayProbability = Math.round(probability * 0.65);
     } else {
-      closureProbability = Math.round(probability * 0.3);
-      delayProbability = Math.round(probability * 0.7);
+      closureProbability = Math.round(probability * 0.25);
+      delayProbability = Math.round(probability * 0.75);
     }
   }
 
