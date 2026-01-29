@@ -180,6 +180,15 @@
     "feelsLike": -9
   },
   {
+    "school": "Indiana",
+    "date": "2026-01-29",
+    "status": "delay",
+    "temperature": 5,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -6
+  },
+  {
     "school": "Homer-Center",
     "date": "2026-01-27",
     "status": "closed",
@@ -187,15 +196,6 @@
     "snowfall": 0.1,
     "type": "frigid temperature",
     "feelsLike": -20
-  },
-  {
-    "school": "Homer-Center",
-    "date": "2026-01-26",
-    "status": "closed",
-    "temperature": 9,
-    "snowfall": 22,
-    "type": "snow",
-    "feelsLike": -5
   },
   {
     "school": "Homer-Center",
