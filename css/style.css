@@ -213,26 +213,42 @@ section h2 {
   margin-bottom: 1.5rem;
 }
 
+.delay-probabilities {
+  display: flex;
+  gap: 1.5rem;
+}
+
 .delay-probability {
   text-align: center;
+  min-width: 80px;
 }
 
 .delay-probability .percentage {
-  font-size: 3rem;
+  font-size: 2.5rem;
   font-weight: 700;
   line-height: 1;
 }
 
 .delay-probability .label {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: #E5E7EB;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .delay-probability.minimal .percentage { color: #4ade80; }
 .delay-probability.low .percentage { color: #a3e635; }
 .delay-probability.moderate .percentage { color: #fbbf24; }
 .delay-probability.high .percentage { color: #f87171; }
+
+.delay-probability.secondary .percentage {
+  color: #9CA3AF;
+  font-size: 2rem;
+}
+
+.delay-probability.secondary .label {
+  color: #9CA3AF;
+}
 
 .delay-info {
   flex: 1;
