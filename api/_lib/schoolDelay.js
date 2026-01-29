@@ -278,6 +278,7 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
   const totalDisruptions = closedCount + delayCount;
   const disruptionRate = Math.round((totalDisruptions / matches.length) * 100);
   const closureRate = Math.round((closedCount / matches.length) * 100);
+  const delayRate = Math.round((delayCount / matches.length) * 100);
 
   return {
     matchCount: matches.length,
@@ -285,6 +286,7 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
     delayCount,
     disruptionRate,
     closureRate,
+    delayRate,
     topMatches: matches.slice(0, 3).map(m => ({
       date: m.date,
       status: m.status,
@@ -462,11 +464,36 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
   // Cap probability at 95% (never 100% certain)
   probability = Math.min(probability, 95);
 
-  // Determine status
+  // Calculate separate delay and closure probabilities based on historical patterns
+  let delayProbability, closureProbability;
+  if (historicalMatch && historicalMatch.disruptionRate > 0) {
+    // Split the probability based on historical closure vs delay rates
+    const closureRatio = historicalMatch.closureRate / historicalMatch.disruptionRate;
+    const delayRatio = historicalMatch.delayRate / historicalMatch.disruptionRate;
+    closureProbability = Math.round(probability * closureRatio);
+    delayProbability = Math.round(probability * delayRatio);
+  } else {
+    // No historical data - use heuristics based on severity
+    // Higher probabilities lean toward closure, lower toward delay
+    if (probability >= 70) {
+      closureProbability = Math.round(probability * 0.6);
+      delayProbability = Math.round(probability * 0.4);
+    } else if (probability >= 40) {
+      closureProbability = Math.round(probability * 0.4);
+      delayProbability = Math.round(probability * 0.6);
+    } else {
+      closureProbability = Math.round(probability * 0.3);
+      delayProbability = Math.round(probability * 0.7);
+    }
+  }
+
+  // Determine status based on which outcome is more likely
   let status, recommendation;
   if (probability >= 70) {
     status = 'high';
-    recommendation = 'High likelihood of delay or closure. Monitor local announcements.';
+    recommendation = closureProbability > delayProbability
+      ? 'High likelihood of closure. Monitor local announcements closely.'
+      : 'High likelihood of delay or closure. Monitor local announcements.';
   } else if (probability >= 40) {
     status = 'moderate';
     recommendation = 'Moderate chance of delay. Check school district communications.';
@@ -485,6 +512,8 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
 
   return {
     probability,
+    delayProbability,
+    closureProbability,
     status,
     recommendation,
     factors: uniqueFactors,
