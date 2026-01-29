@@ -1,4 +1,4 @@
-const { getCurrentConditions, getForecast, getAlerts } = require('../_lib/noaa');
+const { getCurrentConditions, getForecast, getHourlyForecast, getAlerts } = require('../_lib/noaa');
 const { calculateDelayProbability, getSchoolStatuses, INDIANA_COUNTY_SCHOOLS } = require('../_lib/schoolDelay');
 
 module.exports = async (req, res) => {
@@ -7,9 +7,10 @@ module.exports = async (req, res) => {
 
   try {
     // Fetch weather data and school statuses in parallel
-    const [currentConditions, forecast, alertsData, schoolStatuses] = await Promise.all([
+    const [currentConditions, forecast, hourlyForecast, alertsData, schoolStatuses] = await Promise.all([
       getCurrentConditions('indiana').catch(() => null),
       getForecast('indiana').catch(() => null),
+      getHourlyForecast('indiana').catch(() => null),
       getAlerts().catch(() => ({ alerts: [] })),
       getSchoolStatuses().catch(() => ({}))
     ]);
@@ -18,7 +19,7 @@ module.exports = async (req, res) => {
     const prediction = calculateDelayProbability(
       currentConditions,
       forecast,
-      null,
+      hourlyForecast,
       alertsData.alerts
     );
 
