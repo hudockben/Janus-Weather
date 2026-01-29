@@ -256,12 +256,21 @@ function renderSchoolDelay(data) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const forecastDate = tomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
+  // Determine which probability is higher for styling
+  const primaryType = data.closureProbability > data.delayProbability ? 'closure' : 'delay';
+
   schoolDelayContainer.innerHTML = `
     <div class="delay-date">Forecast for ${forecastDate}</div>
     <div class="delay-status">
-      <div class="delay-probability ${data.status}">
-        <div class="percentage">${data.probability}%</div>
-        <div class="label">Delay Chance</div>
+      <div class="delay-probabilities">
+        <div class="delay-probability ${primaryType === 'delay' ? data.status : 'secondary'}">
+          <div class="percentage">${data.delayProbability}%</div>
+          <div class="label">Delay</div>
+        </div>
+        <div class="delay-probability ${primaryType === 'closure' ? data.status : 'secondary'}">
+          <div class="percentage">${data.closureProbability}%</div>
+          <div class="label">Closure</div>
+        </div>
       </div>
       <div class="delay-info">
         <div class="status-label ${data.status}">${statusLabels[data.status] || data.status}</div>
