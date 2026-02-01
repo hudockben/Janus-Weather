@@ -317,8 +317,14 @@ function renderSchoolDelay(data) {
         const statusLabel = getStatusLabel(s.currentStatus);
         return `
           <div class="school-status-item">
-            <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
-            <span class="school-current-status ${statusClass}">${statusLabel}</span>
+            <div class="school-info">
+              <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
+              <span class="school-current-status ${statusClass}">${statusLabel}</span>
+            </div>
+            <div class="school-probabilities">
+              <span class="school-prob delay" title="Delay probability for ${s.shortName}">${s.delayProbability}% delay</span>
+              <span class="school-prob closure" title="Closure probability for ${s.shortName}">${s.closureProbability}% closure</span>
+            </div>
           </div>
         `;
       }).join('')}
