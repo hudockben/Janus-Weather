@@ -1,9 +1,13 @@
 const express = require('express');
 const path = require('path');
 const noaa = require('./services/noaa');
+const { logWeatherData, getLoggingPreview } = require('../api/_lib/weatherLogger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Parse JSON bodies
+app.use(express.json());
 
 // Serve static files
 app.use(express.static(path.join(__dirname, '../public')));
@@ -65,6 +69,55 @@ app.get('/api/alerts', async (req, res) => {
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Weather logging endpoint - Preview (GET)
+app.get('/api/log-weather', async (req, res) => {
+  try {
+    const preview = await getLoggingPreview();
+    res.json({
+      mode: 'preview',
+      message: 'This is a preview. Use POST request to actually log data.',
+      ...preview
+    });
+  } catch (error) {
+    console.error('Error in log-weather preview:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Weather logging endpoint - Execute (POST)
+app.post('/api/log-weather', async (req, res) => {
+  // Simple API key validation (set LOG_API_KEY env var for security)
+  const apiKey = process.env.LOG_API_KEY;
+  if (apiKey) {
+    const providedKey = req.headers['x-api-key'] ||
+                        req.query.apiKey ||
+                        req.headers.authorization?.replace('Bearer ', '');
+    if (providedKey !== apiKey) {
+      return res.status(401).json({ error: 'Unauthorized. Provide valid API key.' });
+    }
+  }
+
+  try {
+    const options = {
+      forceLog: req.body?.forceLog === true || req.query.forceLog === 'true',
+      dryRun: req.body?.dryRun === true || req.query.dryRun === 'true'
+    };
+
+    const result = await logWeatherData(options);
+
+    res.json({
+      success: true,
+      message: result.logged.length > 0
+        ? `Successfully logged ${result.logged.length} record(s)`
+        : 'No records to log (schools are open or already logged today)',
+      ...result
+    });
+  } catch (error) {
+    console.error('Error logging weather data:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Start server
