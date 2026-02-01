@@ -1,0 +1,73 @@
+name: Daily Weather Logger
+
+on:
+  # Run every weekday at 7:30 AM EST (12:30 UTC)
+  schedule:
+    - cron: '30 12 * * 1-5'
+
+  # Also allow manual trigger
+  workflow_dispatch:
+    inputs:
+      force_log:
+        description: 'Force log even if schools are open'
+        required: false
+        default: 'false'
+        type: boolean
+      dry_run:
+        description: 'Dry run (preview without saving)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  log-weather:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Need write access to push changes
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run weather logger
+        id: logger
+        run: |
+          ARGS=""
+          if [[ "${{ github.event.inputs.force_log }}" == "true" ]]; then
+            ARGS="$ARGS --force"
+          fi
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          node scripts/daily-weather-log.js $ARGS
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet api/_lib/historicalData.json; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.changed == 'true' && github.event.inputs.dry_run != 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add api/_lib/historicalData.json
+          git commit -m "Auto-log weather data for $(date +%Y-%m-%d)
+
+          Automated daily weather and school status logging.
+
+          https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          git push
