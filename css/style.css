@@ -141,6 +141,35 @@ section h2 {
   transform: rotate(-90deg);
 }
 
+/* Section-specific caret colors */
+.collapsible-header .caret.factors-caret {
+  border-top-color: #5FB3A2;
+}
+
+.collapsible-header .caret.historical-caret {
+  border-top-color: #a78bfa;
+}
+
+/* Count badges for collapsible sections */
+.collapsible-header .factor-count,
+.collapsible-header .match-count {
+  font-size: 0.75rem;
+  font-weight: 400;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  margin-left: auto;
+}
+
+.collapsible-header .factor-count {
+  background: rgba(95, 179, 162, 0.2);
+  color: #5FB3A2;
+}
+
+.collapsible-header .match-count {
+  background: rgba(167, 139, 250, 0.2);
+  color: #a78bfa;
+}
+
 .collapsible-header .alerts-count {
   font-size: 0.85rem;
   font-weight: 400;
@@ -280,8 +309,16 @@ section h2 {
 .delay-factors h4 {
   font-size: 0.9rem;
   color: #E5E7EB;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0;
   text-transform: uppercase;
+}
+
+.delay-factors .section-content {
+  margin-top: 0.75rem;
+}
+
+.delay-factors .section-content.collapsed {
+  margin-top: 0;
 }
 
 .delay-factors .factors-explanation {
@@ -329,11 +366,19 @@ section h2 {
 }
 
 .historical-match h4 {
-  color: #7fcfc0;
+  color: #a78bfa;
   text-transform: uppercase;
   font-size: 0.85rem;
   letter-spacing: 0.05em;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
+}
+
+.historical-match .section-content {
+  margin-top: 0.75rem;
+}
+
+.historical-match .section-content.collapsed {
+  margin-top: 0;
 }
 
 .historical-match p {
