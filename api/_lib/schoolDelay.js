@@ -298,6 +298,91 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
   };
 }
 
+// Get historical prediction for a specific school
+function getSchoolHistoricalPrediction(schoolName, temperature, feelsLike, snowfall, weatherType) {
+  if (!historicalData || historicalData.length === 0) return null;
+
+  // Filter historical data for this specific school
+  const schoolData = historicalData.filter(r => r.school === schoolName);
+  if (schoolData.length === 0) return null;
+
+  const currentCategory = categorizeEvent(snowfall, weatherType);
+
+  // Score each historical record by similarity to current conditions
+  const scored = schoolData.map(record => {
+    let similarity = 0;
+
+    const recordCategory = categorizeEvent(record.snowfall, record.type);
+
+    // DISQUALIFY: If snowfall difference is too large (>5 inches), skip this record
+    const snowDiff = Math.abs(record.snowfall - snowfall);
+    if (snowDiff > 5) {
+      return { ...record, similarity: 0, disqualified: true };
+    }
+
+    // Category matching
+    if (currentCategory === recordCategory) {
+      similarity += 4;
+    } else if (
+      (currentCategory === 'cold-only' && recordCategory === 'heavy-snow') ||
+      (currentCategory === 'heavy-snow' && recordCategory === 'cold-only')
+    ) {
+      similarity -= 6;
+    } else {
+      similarity -= 2;
+    }
+
+    // Temperature similarity
+    const tempDiff = Math.abs(record.temperature - temperature);
+    if (tempDiff <= 5) similarity += 3;
+    else if (tempDiff <= 10) similarity += 2;
+    else if (tempDiff <= 15) similarity += 1;
+
+    // Feels-like similarity
+    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
+    if (feelsDiff <= 5) similarity += 3;
+    else if (feelsDiff <= 10) similarity += 2;
+    else if (feelsDiff <= 15) similarity += 1;
+
+    // Snowfall similarity
+    if (snowDiff <= 0.5) similarity += 4;
+    else if (snowDiff <= 1) similarity += 3;
+    else if (snowDiff <= 2) similarity += 2;
+    else if (snowDiff <= 3) similarity += 1;
+
+    // Weather type match
+    const currentType = (weatherType || '').toLowerCase();
+    const recordType = (record.type || '').toLowerCase();
+    if (currentType && recordType && currentType === recordType) similarity += 2;
+    else if (currentType && recordType &&
+             (currentType.includes(recordType) || recordType.includes(currentType))) similarity += 1;
+
+    return { ...record, similarity };
+  });
+
+  // Filter to reasonably similar days
+  const similar = scored.filter(r => !r.disqualified && r.similarity >= 5)
+                        .sort((a, b) => b.similarity - a.similarity);
+
+  if (similar.length === 0) return null;
+
+  // Take up to 5 matches for per-school (fewer records available)
+  const matches = similar.slice(0, 5);
+
+  const closedCount = matches.filter(r => r.status === 'closed').length;
+  const delayCount = matches.filter(r => r.status === 'delay').length;
+  const totalDisruptions = closedCount + delayCount;
+
+  return {
+    matchCount: matches.length,
+    closedCount,
+    delayCount,
+    closureRate: Math.round((closedCount / matches.length) * 100),
+    delayRate: Math.round((delayCount / matches.length) * 100),
+    disruptionRate: Math.round((totalDisruptions / matches.length) * 100)
+  };
+}
+
 // Weather condition thresholds for school delays
 const THRESHOLDS = {
   // Temperature thresholds (Fahrenheit)
@@ -685,8 +770,20 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
   };
 }
 
+// Map school codes to names used in historical data
+const SCHOOL_CODE_TO_HISTORICAL_NAME = {
+  'IASD': 'Indiana',
+  'HCSD': 'Homer-Center',
+  'MCASD': 'Marion Center',
+  'PMASD': 'Penns Manor',
+  'PLSD': 'Purchase Line',
+  'USD': 'United'
+};
+
 module.exports = {
   calculateDelayProbability,
   getSchoolStatuses,
-  INDIANA_COUNTY_SCHOOLS
+  getSchoolHistoricalPrediction,
+  INDIANA_COUNTY_SCHOOLS,
+  SCHOOL_CODE_TO_HISTORICAL_NAME
 };
