@@ -66,9 +66,11 @@ async function loadCurrentConditions(location) {
 function renderCurrentConditions(data) {
   const windDir = getWindDirection(data.windDirection);
   const updated = new Date(data.timestamp).toLocaleString();
+  const weatherType = getWeatherType(data.description);
 
   currentContainer.innerHTML = `
-    <div class="current-container">
+    <div class="current-container" data-weather="${weatherType}">
+      <div class="weather-effects" aria-hidden="true"></div>
       <div class="current-main">
         ${data.icon ? `<img src="${data.icon}" alt="${data.description}" class="current-icon">` : ''}
         <div>
@@ -102,6 +104,65 @@ function renderCurrentConditions(data) {
       </div>
     </div>
   `;
+
+  // Spawn weather particles
+  spawnWeatherEffects(weatherType);
+}
+
+// Determine weather type from description
+function getWeatherType(description) {
+  if (!description) return 'clear';
+  const desc = description.toLowerCase();
+
+  if (desc.includes('snow') || desc.includes('flurr')) return 'snow';
+  if (desc.includes('rain') || desc.includes('drizzle') || desc.includes('shower')) return 'rain';
+  if (desc.includes('fog') || desc.includes('mist') || desc.includes('haze')) return 'fog';
+  if (desc.includes('cloud') || desc.includes('overcast')) return 'cloudy';
+  if (desc.includes('sun') || desc.includes('clear')) return 'clear';
+  return 'clear';
+}
+
+// Spawn weather effect particles
+function spawnWeatherEffects(weatherType) {
+  const container = document.querySelector('.weather-effects');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  if (weatherType === 'snow') {
+    // Spawn 15 snowflakes
+    for (let i = 0; i < 15; i++) {
+      const flake = document.createElement('div');
+      flake.className = 'snowflake';
+      flake.style.left = Math.random() * 100 + '%';
+      flake.style.animationDelay = Math.random() * 5 + 's';
+      flake.style.animationDuration = (4 + Math.random() * 4) + 's';
+      flake.style.opacity = 0.3 + Math.random() * 0.4;
+      flake.style.fontSize = (8 + Math.random() * 8) + 'px';
+      flake.textContent = '❄';
+      container.appendChild(flake);
+    }
+  } else if (weatherType === 'rain') {
+    // Spawn 20 rain drops
+    for (let i = 0; i < 20; i++) {
+      const drop = document.createElement('div');
+      drop.className = 'raindrop';
+      drop.style.left = Math.random() * 100 + '%';
+      drop.style.animationDelay = Math.random() * 2 + 's';
+      drop.style.animationDuration = (0.5 + Math.random() * 0.5) + 's';
+      drop.style.opacity = 0.2 + Math.random() * 0.3;
+      container.appendChild(drop);
+    }
+  } else if (weatherType === 'fog') {
+    // Add fog layers
+    for (let i = 0; i < 3; i++) {
+      const fog = document.createElement('div');
+      fog.className = 'fog-layer';
+      fog.style.animationDelay = i * 2 + 's';
+      fog.style.top = (20 + i * 25) + '%';
+      container.appendChild(fog);
+    }
+  }
 }
 
 // Load hourly forecast
