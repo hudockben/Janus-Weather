@@ -643,6 +643,99 @@ section h2 {
   border-radius: 16px;
   padding: 2rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Weather Effects */
+.weather-effects {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.current-container > *:not(.weather-effects) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Snowflakes */
+.snowflake {
+  position: absolute;
+  top: -20px;
+  color: #fff;
+  animation: snowfall linear infinite;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+@keyframes snowfall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  100% {
+    transform: translateY(calc(100% + 250px)) rotate(360deg);
+  }
+}
+
+/* Rain drops */
+.raindrop {
+  position: absolute;
+  top: -10px;
+  width: 2px;
+  height: 15px;
+  background: linear-gradient(to bottom, transparent, rgba(150, 200, 255, 0.6));
+  border-radius: 0 0 2px 2px;
+  animation: rainfall linear infinite;
+}
+
+@keyframes rainfall {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(300px);
+  }
+}
+
+/* Fog layers */
+.fog-layer {
+  position: absolute;
+  left: -50%;
+  width: 200%;
+  height: 40px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 20%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.08) 80%,
+    transparent 100%
+  );
+  animation: fogdrift 12s ease-in-out infinite;
+  filter: blur(8px);
+}
+
+@keyframes fogdrift {
+  0%, 100% {
+    transform: translateX(-10%);
+  }
+  50% {
+    transform: translateX(10%);
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .snowflake,
+  .raindrop,
+  .fog-layer {
+    animation: none;
+    opacity: 0.3;
+  }
 }
 
 .current-main {
