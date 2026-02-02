@@ -728,11 +728,109 @@ section h2 {
   }
 }
 
+/* Sun glow and rays */
+.sun-glow {
+  position: absolute;
+  top: -30px;
+  right: -30px;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(255, 220, 100, 0.25) 0%, rgba(255, 180, 50, 0.1) 40%, transparent 70%);
+  border-radius: 50%;
+  animation: sunpulse 4s ease-in-out infinite;
+}
+
+.sun-rays {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 60px;
+  height: 60px;
+  animation: sunrotate 30s linear infinite;
+}
+
+.sun-ray {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 40px;
+  background: linear-gradient(to bottom, rgba(255, 220, 100, 0.3), transparent);
+  transform-origin: top center;
+  margin-left: -1px;
+}
+
+@keyframes sunpulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes sunrotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Clouds */
+.cloud {
+  position: absolute;
+  left: -20%;
+  width: 150px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 25px;
+  filter: blur(10px);
+  animation: clouddrift 20s ease-in-out infinite;
+}
+
+.cloud::before,
+.cloud::after {
+  content: '';
+  position: absolute;
+  background: inherit;
+  border-radius: 50%;
+}
+
+.cloud::before {
+  width: 60px;
+  height: 60px;
+  top: -25px;
+  left: 20px;
+}
+
+.cloud::after {
+  width: 45px;
+  height: 45px;
+  top: -15px;
+  right: 25px;
+}
+
+@keyframes clouddrift {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(140%);
+  }
+}
+
 /* Reduce motion for accessibility */
 @media (prefers-reduced-motion: reduce) {
   .snowflake,
   .raindrop,
-  .fog-layer {
+  .fog-layer,
+  .sun-glow,
+  .sun-rays,
+  .cloud {
     animation: none;
     opacity: 0.3;
   }

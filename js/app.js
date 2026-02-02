@@ -162,6 +162,32 @@ function spawnWeatherEffects(weatherType) {
       fog.style.top = (20 + i * 25) + '%';
       container.appendChild(fog);
     }
+  } else if (weatherType === 'clear') {
+    // Add sun glow and rays
+    const sunGlow = document.createElement('div');
+    sunGlow.className = 'sun-glow';
+    container.appendChild(sunGlow);
+
+    // Add rotating rays
+    const sunRays = document.createElement('div');
+    sunRays.className = 'sun-rays';
+    for (let i = 0; i < 8; i++) {
+      const ray = document.createElement('div');
+      ray.className = 'sun-ray';
+      ray.style.transform = `rotate(${i * 45}deg)`;
+      sunRays.appendChild(ray);
+    }
+    container.appendChild(sunRays);
+  } else if (weatherType === 'cloudy') {
+    // Add drifting clouds
+    for (let i = 0; i < 3; i++) {
+      const cloud = document.createElement('div');
+      cloud.className = 'cloud';
+      cloud.style.top = (15 + i * 30) + '%';
+      cloud.style.animationDelay = i * 3 + 's';
+      cloud.style.opacity = 0.08 + Math.random() * 0.06;
+      container.appendChild(cloud);
+    }
   }
 }
 
