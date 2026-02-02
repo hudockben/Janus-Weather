@@ -460,27 +460,26 @@ section h2 {
   }
 }
 
-.schools-header {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.8rem;
-  color: #B8C0C8;
+.inline-label {
+  font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 0.5rem;
-  padding: 0 0.25rem;
+  font-weight: 600;
 }
 
-.schools-header-today {
+.today-label {
   color: #7fcfc0;
-  font-weight: 600;
 }
 
-.schools-header-tomorrow {
+.tomorrow-label {
   color: #fbbf24;
-  font-weight: 600;
+}
+
+.school-today-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .school-status-item {
