@@ -307,6 +307,7 @@ function renderSchoolDelay(data) {
           <div class="past-matches">
             ${data.historicalMatch.topMatches.map(m => `
               <div class="past-match-item">
+                <span class="past-school">${m.school}</span>
                 <span class="past-date">${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                 <span class="past-type">${m.type}</span>
                 <span class="past-conditions">${m.temperature}°F / Feels ${m.feelsLike}°F${m.snowfall > 0 ? ` / ${m.snowfall}" snow` : ''}</span>

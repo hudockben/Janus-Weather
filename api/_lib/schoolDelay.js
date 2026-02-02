@@ -288,6 +288,7 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
     closureRate,
     delayRate,
     topMatches: matches.slice(0, 3).map(m => ({
+      school: m.school,
       date: m.date,
       status: m.status,
       temperature: m.temperature,

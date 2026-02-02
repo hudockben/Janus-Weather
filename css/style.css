@@ -403,12 +403,18 @@ section h2 {
 
 .past-match-item {
   display: grid;
-  grid-template-columns: 100px 130px 1fr auto;
+  grid-template-columns: 95px 100px 110px 1fr auto;
   gap: 0.75rem;
   align-items: center;
   font-size: 0.85rem;
   padding: 0.5rem 0;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.past-school {
+  color: #7fcfc0;
+  font-weight: 600;
+  font-size: 0.8rem;
 }
 
 .past-date {
