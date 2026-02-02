@@ -10,21 +10,21 @@
   },
   {
     "school": "Indiana",
-    "date": "2022-02-18",
-    "status": "closed",
-    "temperature": 25,
-    "snowfall": 1.5,
-    "type": "ice",
-    "feelsLike": 0
-  },
-  {
-    "school": "Indiana",
     "date": "2022-02-04",
     "status": "closed",
     "temperature": 25,
     "snowfall": 0.8,
     "type": "ice",
     "feelsLike": 5
+  },
+  {
+    "school": "Indiana",
+    "date": "2022-02-18",
+    "status": "closed",
+    "temperature": 25,
+    "snowfall": 1.5,
+    "type": "ice",
+    "feelsLike": 0
   },
   {
     "school": "Indiana",
@@ -37,21 +37,21 @@
   },
   {
     "school": "Indiana",
+    "date": "2024-01-09",
+    "status": "delay",
+    "temperature": 20,
+    "snowfall": 2,
+    "type": "ice",
+    "feelsLike": 15
+  },
+  {
+    "school": "Indiana",
     "date": "2024-01-16",
     "status": "closed",
     "temperature": 19,
     "snowfall": 3,
     "type": "snow",
     "feelsLike": -5
-  },
-  {
-    "school": "Indiana",
-    "date": "2024-01-19",
-    "status": "closed",
-    "temperature": 25,
-    "snowfall": 5,
-    "type": "snow",
-    "feelsLike": 10
   },
   {
     "school": "Indiana",
@@ -64,12 +64,12 @@
   },
   {
     "school": "Indiana",
-    "date": "2024-01-09",
-    "status": "delay",
-    "temperature": 20,
-    "snowfall": 2,
-    "type": "ice",
-    "feelsLike": 15
+    "date": "2024-01-19",
+    "status": "closed",
+    "temperature": 25,
+    "snowfall": 5,
+    "type": "snow",
+    "feelsLike": 10
   },
   {
     "school": "Indiana",
@@ -118,11 +118,11 @@
   },
   {
     "school": "Indiana",
-    "date": "2025-12-02",
-    "status": "closed",
-    "temperature": 24,
-    "snowfall": 5,
-    "type": "snow",
+    "date": "2025-02-06",
+    "status": "delay",
+    "temperature": 28,
+    "snowfall": 0.1,
+    "type": "ice",
     "feelsLike": 20
   },
   {
@@ -136,12 +136,21 @@
   },
   {
     "school": "Indiana",
-    "date": "2025-02-06",
-    "status": "delay",
-    "temperature": 28,
-    "snowfall": 0.1,
-    "type": "ice",
+    "date": "2025-12-02",
+    "status": "closed",
+    "temperature": 24,
+    "snowfall": 5,
+    "type": "snow",
     "feelsLike": 20
+  },
+  {
+    "school": "Indiana",
+    "date": "2026-01-20",
+    "status": "delay",
+    "temperature": 13,
+    "snowfall": 0.1,
+    "type": "frigid temperature",
+    "feelsLike": 0
   },
   {
     "school": "Indiana",
@@ -160,15 +169,6 @@
     "snowfall": 0,
     "type": "frigid temperature",
     "feelsLike": -20
-  },
-  {
-    "school": "Indiana",
-    "date": "2026-01-20",
-    "status": "delay",
-    "temperature": 13,
-    "snowfall": 0.1,
-    "type": "frigid temperature",
-    "feelsLike": 0
   },
   {
     "school": "Indiana",
@@ -199,12 +199,66 @@
   },
   {
     "school": "Marion Center",
-    "date": "2026-01-26",
+    "date": "2024-01-16",
     "status": "closed",
-    "temperature": 14,
-    "snowfall": 12,
+    "temperature": 12,
+    "snowfall": 4,
     "type": "snow",
     "feelsLike": 0
+  },
+  {
+    "school": "Marion Center",
+    "date": "2024-01-19",
+    "status": "closed",
+    "temperature": 18,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 5
+  },
+  {
+    "school": "Marion Center",
+    "date": "2024-02-16",
+    "status": "closed",
+    "temperature": 28,
+    "snowfall": 4,
+    "type": "snow",
+    "feelsLike": 15
+  },
+  {
+    "school": "Marion Center",
+    "date": "2024-02-20",
+    "status": "closed",
+    "temperature": 24,
+    "snowfall": 0,
+    "type": "ice",
+    "feelsLike": 20
+  },
+  {
+    "school": "Marion Center",
+    "date": "2025-01-21",
+    "status": "closed",
+    "temperature": 8,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -18
+  },
+  {
+    "school": "Marion Center",
+    "date": "2025-12-02",
+    "status": "closed",
+    "temperature": 33,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 24
+  },
+  {
+    "school": "Marion Center",
+    "date": "2025-12-15",
+    "status": "closed",
+    "temperature": 26,
+    "snowfall": 2,
+    "type": "ice",
+    "feelsLike": 20
   },
   {
     "school": "Marion Center",
@@ -216,12 +270,552 @@
     "feelsLike": 17
   },
   {
+    "school": "Marion Center",
+    "date": "2026-01-26",
+    "status": "closed",
+    "temperature": 2,
+    "snowfall": 9,
+    "type": "snow",
+    "feelsLike": -20
+  },
+  {
+    "school": "Marion Center",
+    "date": "2026-01-27",
+    "status": "closed",
+    "temperature": 6,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Marion Center",
+    "date": "2026-01-28",
+    "status": "closed",
+    "temperature": 2,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Marion Center",
+    "date": "2026-01-29",
+    "status": "delay",
+    "temperature": 6,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Marion Center",
+    "date": "2026-01-30",
+    "status": "closed",
+    "temperature": 9,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": 0
+  },
+  {
+    "school": "United",
+    "date": "2023-01-25",
+    "status": "closed",
+    "temperature": 28,
+    "snowfall": 5,
+    "type": "snow",
+    "feelsLike": 28
+  },
+  {
+    "school": "United",
+    "date": "2024-01-16",
+    "status": "closed",
+    "temperature": 15,
+    "snowfall": 4,
+    "type": "snow",
+    "feelsLike": 0
+  },
+  {
+    "school": "United",
+    "date": "2024-01-17",
+    "status": "closed",
+    "temperature": 14,
+    "snowfall": 0.1,
+    "type": "ice",
+    "feelsLike": 0
+  },
+  {
+    "school": "United",
+    "date": "2024-01-19",
+    "status": "closed",
+    "temperature": 15,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 5
+  },
+  {
+    "school": "United",
+    "date": "2024-02-13",
+    "status": "closed",
+    "temperature": 30,
+    "snowfall": 4,
+    "type": "snow",
+    "feelsLike": 25
+  },
+  {
+    "school": "United",
+    "date": "2025-01-06",
+    "status": "delay",
+    "temperature": 20,
+    "snowfall": 0.1,
+    "type": "ice",
+    "feelsLike": 24
+  },
+  {
+    "school": "United",
+    "date": "2025-01-16",
+    "status": "closed",
+    "temperature": 25,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 15
+  },
+  {
+    "school": "United",
+    "date": "2025-01-17",
+    "status": "delay",
+    "temperature": 20,
+    "snowfall": 1,
+    "type": "frigid temperature",
+    "feelsLike": 10
+  },
+  {
+    "school": "United",
+    "date": "2025-01-21",
+    "status": "closed",
+    "temperature": 5,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -18
+  },
+  {
+    "school": "United",
+    "date": "2025-12-02",
+    "status": "closed",
+    "temperature": 33,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 24
+  },
+  {
+    "school": "United",
+    "date": "2026-01-20",
+    "status": "delay",
+    "temperature": 26,
+    "snowfall": 0.1,
+    "type": "ice",
+    "feelsLike": 22
+  },
+  {
     "school": "United",
     "date": "2026-01-21",
     "status": "early dismissal",
+    "temperature": 22,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 18
+  },
+  {
+    "school": "United",
+    "date": "2026-01-22",
+    "status": "delay",
+    "temperature": 18,
+    "snowfall": 1,
+    "type": "ice",
+    "feelsLike": 14
+  },
+  {
+    "school": "United",
+    "date": "2026-01-26",
+    "status": "closed",
+    "temperature": 3,
+    "snowfall": 8,
+    "type": "snow",
+    "feelsLike": -20
+  },
+  {
+    "school": "United",
+    "date": "2026-01-27",
+    "status": "closed",
+    "temperature": 5,
+    "snowfall": 0.1,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "United",
+    "date": "2026-01-28",
+    "status": "delay",
+    "temperature": 3,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Homer Center",
+    "date": "2024-01-16",
+    "status": "closed",
+    "temperature": 15,
+    "snowfall": 4,
+    "type": "frigid temperature",
+    "feelsLike": 0
+  },
+  {
+    "school": "Homer Center",
+    "date": "2024-01-19",
+    "status": "closed",
+    "temperature": 16,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 5
+  },
+  {
+    "school": "Homer Center",
+    "date": "2024-02-13",
+    "status": "closed",
+    "temperature": 28,
+    "snowfall": 4,
+    "type": "snow",
+    "feelsLike": 25
+  },
+  {
+    "school": "Homer Center",
+    "date": "2025-01-06",
+    "status": "closed",
+    "temperature": 30,
+    "snowfall": 0.1,
+    "type": "ice",
+    "feelsLike": 24
+  },
+  {
+    "school": "Homer Center",
+    "date": "2025-01-21",
+    "status": "closed",
+    "temperature": 6,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -15
+  },
+  {
+    "school": "Homer Center",
+    "date": "2025-12-02",
+    "status": "closed",
+    "temperature": 33,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 24
+  },
+  {
+    "school": "Homer Center",
+    "date": "2026-01-26",
+    "status": "closed",
+    "temperature": -1,
+    "snowfall": 8,
+    "type": "frigid temperature",
+    "feelsLike": -15
+  },
+  {
+    "school": "Homer Center",
+    "date": "2026-01-27",
+    "status": "closed",
+    "temperature": 5,
+    "snowfall": 0.1,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Homer Center",
+    "date": "2026-01-28",
+    "status": "delay",
+    "temperature": 2,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Homer Center",
+    "date": "2026-01-29",
+    "status": "delay",
+    "temperature": 6,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Homer Center",
+    "date": "2026-01-30",
+    "status": "delay",
+    "temperature": 9,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": 0
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2024-01-09",
+    "status": "closed",
+    "temperature": 36,
+    "snowfall": 0.1,
+    "type": "ice",
+    "feelsLike": 30
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2024-01-16",
+    "status": "closed",
+    "temperature": 15,
+    "snowfall": 4,
+    "type": "snow",
+    "feelsLike": 0
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2024-01-19",
+    "status": "closed",
     "temperature": 17,
     "snowfall": 3,
     "type": "snow",
+    "feelsLike": 5
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2024-02-13",
+    "status": "closed",
+    "temperature": 29,
+    "snowfall": 4,
+    "type": "snow",
+    "feelsLike": 25
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2025-01-06",
+    "status": "closed",
+    "temperature": 30,
+    "snowfall": 0.1,
+    "type": "ice",
+    "feelsLike": 24
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2025-01-16",
+    "status": "closed",
+    "temperature": 25,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 15
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2025-01-17",
+    "status": "delay",
+    "temperature": 20,
+    "snowfall": 1,
+    "type": "snow",
     "feelsLike": 10
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2025-01-21",
+    "status": "closed",
+    "temperature": 6,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -15
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2025-12-02",
+    "status": "closed",
+    "temperature": 33,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 24
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2026-01-26",
+    "status": "closed",
+    "temperature": 2,
+    "snowfall": 8,
+    "type": "snow",
+    "feelsLike": -20
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2026-01-27",
+    "status": "closed",
+    "temperature": 5,
+    "snowfall": 0.1,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2026-01-28",
+    "status": "delay",
+    "temperature": 2,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2026-01-29",
+    "status": "flexible instruction day",
+    "temperature": 4,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2026-01-30",
+    "status": "delay",
+    "temperature": 9,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": 0
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2024-01-16",
+    "status": "closed",
+    "temperature": 15,
+    "snowfall": 4,
+    "type": "snow",
+    "feelsLike": 0
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2024-01-17",
+    "status": "closed",
+    "temperature": 13,
+    "snowfall": 0.1,
+    "type": "ice",
+    "feelsLike": 0
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2024-01-19",
+    "status": "closed",
+    "temperature": 17,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 5
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2025-01-06",
+    "status": "closed",
+    "temperature": 30,
+    "snowfall": 0.1,
+    "type": "ice",
+    "feelsLike": 24
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2025-01-07",
+    "status": "delay",
+    "temperature": 26,
+    "snowfall": 0.1,
+    "type": "ice",
+    "feelsLike": 20
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2025-01-16",
+    "status": "closed",
+    "temperature": 25,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 15
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2025-01-17",
+    "status": "delay",
+    "temperature": 21,
+    "snowfall": 1,
+    "type": "snow",
+    "feelsLike": 10
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2025-01-21",
+    "status": "closed",
+    "temperature": 6,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -15
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2025-12-02",
+    "status": "closed",
+    "temperature": 33,
+    "snowfall": 3,
+    "type": "snow",
+    "feelsLike": 24
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2025-12-15",
+    "status": "closed",
+    "temperature": 27,
+    "snowfall": 2,
+    "type": "ice",
+    "feelsLike": 20
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2026-01-26",
+    "status": "closed",
+    "temperature": 2,
+    "snowfall": 8,
+    "type": "snow",
+    "feelsLike": -20
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2026-01-27",
+    "status": "flexible instruction day",
+    "temperature": 5,
+    "snowfall": 0.1,
+    "type": "ice",
+    "feelsLike": -5
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2026-01-28",
+    "status": "delay",
+    "temperature": 2,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2026-01-29",
+    "status": "flexible instruction day",
+    "temperature": 4,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": -5
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2026-01-30",
+    "status": "flexible instruction day",
+    "temperature": 9,
+    "snowfall": 0,
+    "type": "frigid temperature",
+    "feelsLike": 0
   }
 ]
