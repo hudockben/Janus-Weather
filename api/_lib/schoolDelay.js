@@ -766,7 +766,7 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     factors: uniqueFactors,
     historicalMatch,
     schools: INDIANA_COUNTY_SCHOOLS,
-    disclaimer: 'This is an estimate based on weather conditions and historical patterns. Always check official school district announcements for actual delay/closure information.'
+    disclaimer: 'This is an estimate based on weather conditions and historical patterns. Weather data refreshes every 10 minutes. Always check official school district announcements for actual delay/closure information.'
   };
 }
 
