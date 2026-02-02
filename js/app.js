@@ -307,6 +307,7 @@ function renderSchoolDelay(data) {
           <div class="past-matches">
             ${data.historicalMatch.topMatches.map(m => `
               <div class="past-match-item">
+                <span class="past-school">${m.school}</span>
                 <span class="past-date">${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                 <span class="past-type">${m.type}</span>
                 <span class="past-conditions">${m.temperature}°F / Feels ${m.feelsLike}°F${m.snowfall > 0 ? ` / ${m.snowfall}" snow` : ''}</span>
@@ -322,9 +323,7 @@ function renderSchoolDelay(data) {
       ${data.schools.map(s => {
         const statusClass = getStatusClass(s.currentStatus);
         const statusLabel = getStatusLabel(s.currentStatus);
-        const riskClass = s.delayProbability >= 50 || s.closureProbability >= 50 ? 'high' :
-                          s.delayProbability >= 30 || s.closureProbability >= 30 ? 'moderate' : 'low';
-        const riskLabel = riskClass.toUpperCase();
+        const riskTierLabel = getRiskTierLabel(s.riskTier);
         const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
         return `
           <div class="school-card">
@@ -337,7 +336,7 @@ function renderSchoolDelay(data) {
               <span class="row-label">TOMORROW:</span>
               <span class="school-prob delay">${s.delayProbability}% delay</span>
               <span class="school-prob closure">${s.closureProbability}% closure</span>
-              <span class="risk-badge ${riskClass}">${riskLabel}</span>
+              <span class="school-risk-tier ${s.riskTier}">${riskTierLabel}</span>
             </div>
           </div>
         `;
@@ -401,6 +400,17 @@ function getStatusLabel(status) {
     case 'flexible instruction':
     case 'flexible instruction day': return 'Flexible Instruction';
     default: return 'Checking...';
+  }
+}
+
+// Helper: Get display label for risk tier
+function getRiskTierLabel(tier) {
+  switch (tier) {
+    case 'high': return 'High Risk';
+    case 'moderate': return 'Moderate';
+    case 'low': return 'Low Risk';
+    case 'minimal': return 'Minimal';
+    default: return '';
   }
 }
 

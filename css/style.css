@@ -228,6 +228,14 @@ section h2 {
   color: #7fcfc0;
 }
 
+.section-subtitle {
+  font-size: 0.85rem;
+  color: #B8C0C8;
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+  font-style: italic;
+}
+
 .delay-date {
   font-size: 0.95rem;
   color: #E5E7EB;
@@ -395,12 +403,18 @@ section h2 {
 
 .past-match-item {
   display: grid;
-  grid-template-columns: 100px 130px 1fr auto;
+  grid-template-columns: 95px 100px 110px 1fr auto;
   gap: 0.75rem;
   align-items: center;
   font-size: 0.85rem;
   padding: 0.5rem 0;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.past-school {
+  color: #7fcfc0;
+  font-weight: 600;
+  font-size: 0.8rem;
 }
 
 .past-date {
@@ -549,28 +563,38 @@ section h2 {
   border: 1px solid rgba(248, 113, 113, 0.3);
 }
 
-.risk-badge {
+.school-risk-tier {
   font-size: 0.65rem;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
   font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
   white-space: nowrap;
 }
 
-.risk-badge.low {
-  background: rgba(74, 222, 128, 0.15);
-  color: #4ade80;
-}
-
-.risk-badge.moderate {
-  background: rgba(251, 191, 36, 0.15);
-  color: #fbbf24;
-}
-
-.risk-badge.high {
-  background: rgba(248, 113, 113, 0.15);
+.school-risk-tier.high {
+  background: rgba(248, 113, 113, 0.2);
   color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+}
+
+.school-risk-tier.moderate {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+
+.school-risk-tier.low {
+  background: rgba(163, 230, 53, 0.2);
+  color: #a3e635;
+  border: 1px solid rgba(163, 230, 53, 0.4);
+}
+
+.school-risk-tier.minimal {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.4);
 }
 
 @media (max-width: 480px) {
@@ -592,7 +616,7 @@ section h2 {
     padding: 0.15rem 0.4rem;
   }
 
-  .risk-badge {
+  .school-risk-tier {
     font-size: 0.55rem;
     padding: 0.15rem 0.4rem;
   }
