@@ -460,12 +460,27 @@ section h2 {
   }
 }
 
-.schools-date {
+.schools-header {
   grid-column: 1 / -1;
-  font-size: 0.9rem;
-  color: #E5E7EB;
-  font-style: italic;
-  margin-bottom: 0.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #B8C0C8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+  padding: 0 0.25rem;
+}
+
+.schools-header-today {
+  color: #7fcfc0;
+  font-weight: 600;
+}
+
+.schools-header-tomorrow {
+  color: #fbbf24;
+  font-weight: 600;
 }
 
 .school-status-item {

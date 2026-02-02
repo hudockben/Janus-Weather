@@ -320,7 +320,10 @@ function renderSchoolDelay(data) {
     ` : ''}
 
     <div class="delay-schools">
-      <div class="schools-date">Current Status — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+      <div class="schools-header">
+        <span class="schools-header-today">Today — ${new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+        <span class="schools-header-tomorrow">Tomorrow's Forecast</span>
+      </div>
       ${data.schools.map(s => {
         const statusClass = getStatusClass(s.currentStatus);
         const statusLabel = getStatusLabel(s.currentStatus);
@@ -332,9 +335,9 @@ function renderSchoolDelay(data) {
               <span class="school-current-status ${statusClass}">${statusLabel}</span>
             </div>
             <div class="school-probabilities">
-              <span class="school-prob delay" title="Delay probability for ${s.shortName}">${s.delayProbability}% delay</span>
-              <span class="school-prob closure" title="Closure probability for ${s.shortName}">${s.closureProbability}% closure</span>
-              <span class="school-risk-tier ${s.riskTier}" title="Risk level for ${s.shortName}">${riskTierLabel}</span>
+              <span class="school-prob delay" title="Tomorrow's delay probability for ${s.shortName}">${s.delayProbability}% delay</span>
+              <span class="school-prob closure" title="Tomorrow's closure probability for ${s.shortName}">${s.closureProbability}% closure</span>
+              <span class="school-risk-tier ${s.riskTier}" title="Tomorrow's risk level for ${s.shortName}">${riskTierLabel}</span>
             </div>
           </div>
         `;
