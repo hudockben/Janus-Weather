@@ -70,6 +70,19 @@ module.exports = async (req, res) => {
         );
       }
 
+      // Calculate combined probability and determine risk tier
+      const combinedProbability = Math.max(delayProbability, closureProbability);
+      let riskTier;
+      if (combinedProbability >= 70) {
+        riskTier = 'high';
+      } else if (combinedProbability >= 40) {
+        riskTier = 'moderate';
+      } else if (combinedProbability >= 15) {
+        riskTier = 'low';
+      } else {
+        riskTier = 'minimal';
+      }
+
       return {
         ...school,
         currentStatus: schoolStatuses[school.code]?.status || 'unknown',
@@ -77,6 +90,7 @@ module.exports = async (req, res) => {
         lastChecked: schoolStatuses[school.code]?.lastChecked || null,
         delayProbability,
         closureProbability,
+        riskTier,
         historicalMatches: schoolPrediction?.matchCount || 0
       };
     });
