@@ -324,21 +324,19 @@ function renderSchoolDelay(data) {
         const statusClass = getStatusClass(s.currentStatus);
         const statusLabel = getStatusLabel(s.currentStatus);
         const riskTierLabel = getRiskTierLabel(s.riskTier);
-        const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
         return `
-          <div class="school-status-item">
-            <div class="school-info">
-              <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
-              <div class="school-today-row">
-                <span class="inline-label today-label">Today ${todayLabel}:</span>
-                <span class="school-current-status ${statusClass}">${statusLabel}</span>
-              </div>
+          <div class="school-card">
+            <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
+            <div class="school-row today-row">
+              <span class="row-label">TODAY ${todayDate}:</span>
+              <span class="school-current-status ${statusClass}">${statusLabel}</span>
             </div>
-            <div class="school-probabilities">
-              <span class="inline-label tomorrow-label">Tomorrow:</span>
-              <span class="school-prob delay" title="Tomorrow's delay probability for ${s.shortName}">${s.delayProbability}% delay</span>
-              <span class="school-prob closure" title="Tomorrow's closure probability for ${s.shortName}">${s.closureProbability}% closure</span>
-              <span class="school-risk-tier ${s.riskTier}" title="Tomorrow's risk level for ${s.shortName}">${riskTierLabel}</span>
+            <div class="school-row tomorrow-row">
+              <span class="row-label">TOMORROW:</span>
+              <span class="school-prob delay">${s.delayProbability}% delay</span>
+              <span class="school-prob closure">${s.closureProbability}% closure</span>
+              <span class="school-risk-tier ${s.riskTier}">${riskTierLabel}</span>
             </div>
           </div>
         `;
