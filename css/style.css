@@ -228,6 +228,14 @@ section h2 {
   color: #7fcfc0;
 }
 
+.section-subtitle {
+  font-size: 0.85rem;
+  color: #B8C0C8;
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+  font-style: italic;
+}
+
 .delay-date {
   font-size: 0.95rem;
   color: #E5E7EB;
