@@ -323,6 +323,7 @@ function renderSchoolDelay(data) {
       ${data.schools.map(s => {
         const statusClass = getStatusClass(s.currentStatus);
         const statusLabel = getStatusLabel(s.currentStatus);
+        const riskTierLabel = getRiskTierLabel(s.riskTier);
         return `
           <div class="school-status-item">
             <div class="school-info">
@@ -332,6 +333,7 @@ function renderSchoolDelay(data) {
             <div class="school-probabilities">
               <span class="school-prob delay" title="Delay probability for ${s.shortName}">${s.delayProbability}% delay</span>
               <span class="school-prob closure" title="Closure probability for ${s.shortName}">${s.closureProbability}% closure</span>
+              <span class="school-risk-tier ${s.riskTier}" title="Risk level for ${s.shortName}">${riskTierLabel}</span>
             </div>
           </div>
         `;
@@ -395,6 +397,17 @@ function getStatusLabel(status) {
     case 'flexible instruction':
     case 'flexible instruction day': return 'Flexible Instruction';
     default: return 'Checking...';
+  }
+}
+
+// Helper: Get display label for risk tier
+function getRiskTierLabel(tier) {
+  switch (tier) {
+    case 'high': return 'High Risk';
+    case 'moderate': return 'Moderate';
+    case 'low': return 'Low Risk';
+    case 'minimal': return 'Minimal';
+    default: return '';
   }
 }
 
