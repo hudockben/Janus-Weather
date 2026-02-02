@@ -446,40 +446,6 @@ section h2 {
   }
 }
 
-.schools-date {
-  grid-column: 1 / -1;
-  font-size: 0.9rem;
-  color: #E5E7EB;
-  font-style: italic;
-  margin-bottom: 0.25rem;
-  word-break: break-word;
-  overflow-wrap: break-word;
-}
-
-.school-status-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-  max-width: 100%;
-}
-
-.school-status-item .school-name {
-  color: #e2e8f0;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.2s;
-}
-
-.school-status-item .school-name:hover {
-  color: #5FB3A2;
-  text-decoration: underline;
-}
-
 .school-current-status {
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
@@ -519,24 +485,48 @@ section h2 {
   color: #E5E7EB;
 }
 
-/* Per-school probability display */
-.school-status-item {
+/* School card layout */
+.school-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.school-card .school-name {
+  color: #e2e8f0;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.school-card .school-name:hover {
+  color: #5FB3A2;
+  text-decoration: underline;
+}
+
+.school-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  min-width: 0;
 }
 
-.school-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex: 1;
-  min-width: 200px;
-}
-
-.school-probabilities {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
+.school-row .row-label {
+  font-size: 0.7rem;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  flex-shrink: 0;
 }
 
 .school-prob {
@@ -559,31 +549,52 @@ section h2 {
   border: 1px solid rgba(248, 113, 113, 0.3);
 }
 
+.risk-badge {
+  font-size: 0.65rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.risk-badge.low {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+
+.risk-badge.moderate {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+.risk-badge.high {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
 @media (max-width: 480px) {
-  .school-status-item {
-    flex-direction: column;
-    align-items: flex-start;
+  .school-card {
+    padding: 0.6rem 0.75rem;
   }
 
-  .school-info {
-    width: 100%;
-    justify-content: space-between;
-    flex-wrap: wrap;
+  .school-card .school-name {
+    font-size: 0.9rem;
   }
 
-  .school-probabilities {
+  .school-row .row-label {
+    font-size: 0.6rem;
     width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
   }
 
   .school-prob {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     padding: 0.15rem 0.4rem;
   }
 
-  .schools-date {
-    font-size: 0.8rem;
+  .risk-badge {
+    font-size: 0.55rem;
+    padding: 0.15rem 0.4rem;
   }
 }
 

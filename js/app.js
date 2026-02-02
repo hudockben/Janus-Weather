@@ -319,19 +319,25 @@ function renderSchoolDelay(data) {
     ` : ''}
 
     <div class="delay-schools">
-      <div class="schools-date">Current Status — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
       ${data.schools.map(s => {
         const statusClass = getStatusClass(s.currentStatus);
         const statusLabel = getStatusLabel(s.currentStatus);
+        const riskClass = s.delayProbability >= 50 || s.closureProbability >= 50 ? 'high' :
+                          s.delayProbability >= 30 || s.closureProbability >= 30 ? 'moderate' : 'low';
+        const riskLabel = riskClass.toUpperCase();
+        const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
         return `
-          <div class="school-status-item">
-            <div class="school-info">
-              <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
+          <div class="school-card">
+            <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
+            <div class="school-row today-row">
+              <span class="row-label">TODAY ${todayDate}:</span>
               <span class="school-current-status ${statusClass}">${statusLabel}</span>
             </div>
-            <div class="school-probabilities">
-              <span class="school-prob delay" title="Delay probability for ${s.shortName}">${s.delayProbability}% delay</span>
-              <span class="school-prob closure" title="Closure probability for ${s.shortName}">${s.closureProbability}% closure</span>
+            <div class="school-row tomorrow-row">
+              <span class="row-label">TOMORROW:</span>
+              <span class="school-prob delay">${s.delayProbability}% delay</span>
+              <span class="school-prob closure">${s.closureProbability}% closure</span>
+              <span class="risk-badge ${riskClass}">${riskLabel}</span>
             </div>
           </div>
         `;
