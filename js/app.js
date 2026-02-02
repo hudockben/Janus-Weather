@@ -1,6 +1,7 @@
 // Janus Forecast Model - Frontend Application
 
 const API_BASE = '/api';
+let isFirstLoad = true;
 
 // DOM Elements
 const alertsSection = document.getElementById('alerts-section');
@@ -21,6 +22,65 @@ async function init() {
 
   // Auto-refresh every 10 minutes
   setInterval(refreshAllData, 600000);
+}
+
+// Play full-screen intro animation based on weather
+function playIntroAnimation(weatherType) {
+  // Create fullscreen overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'intro-weather-overlay';
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(overlay);
+
+  // Spawn particles based on weather
+  if (weatherType === 'snow') {
+    for (let i = 0; i < 50; i++) {
+      const flake = document.createElement('div');
+      flake.className = 'intro-snowflake';
+      flake.style.left = Math.random() * 100 + 'vw';
+      flake.style.animationDelay = Math.random() * 2 + 's';
+      flake.style.animationDuration = (2 + Math.random() * 2) + 's';
+      flake.style.fontSize = (12 + Math.random() * 16) + 'px';
+      flake.textContent = '❄';
+      overlay.appendChild(flake);
+    }
+  } else if (weatherType === 'rain') {
+    for (let i = 0; i < 80; i++) {
+      const drop = document.createElement('div');
+      drop.className = 'intro-raindrop';
+      drop.style.left = Math.random() * 100 + 'vw';
+      drop.style.animationDelay = Math.random() * 1.5 + 's';
+      drop.style.animationDuration = (0.4 + Math.random() * 0.3) + 's';
+      overlay.appendChild(drop);
+    }
+  } else if (weatherType === 'clear') {
+    const sunburst = document.createElement('div');
+    sunburst.className = 'intro-sunburst';
+    overlay.appendChild(sunburst);
+  } else if (weatherType === 'cloudy') {
+    for (let i = 0; i < 5; i++) {
+      const cloud = document.createElement('div');
+      cloud.className = 'intro-cloud';
+      cloud.style.top = (10 + Math.random() * 60) + 'vh';
+      cloud.style.animationDelay = i * 0.3 + 's';
+      cloud.style.transform = `scale(${0.6 + Math.random() * 0.8})`;
+      overlay.appendChild(cloud);
+    }
+  } else if (weatherType === 'fog') {
+    for (let i = 0; i < 4; i++) {
+      const fog = document.createElement('div');
+      fog.className = 'intro-fog';
+      fog.style.top = (i * 25) + 'vh';
+      fog.style.animationDelay = i * 0.2 + 's';
+      overlay.appendChild(fog);
+    }
+  }
+
+  // Fade out and remove after animation
+  setTimeout(() => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => overlay.remove(), 800);
+  }, 2500);
 }
 
 // Toggle alerts section expanded/collapsed
@@ -105,8 +165,14 @@ function renderCurrentConditions(data) {
     </div>
   `;
 
-  // Spawn weather particles
+  // Spawn weather particles in the container
   spawnWeatherEffects(weatherType);
+
+  // Play intro animation on first load
+  if (isFirstLoad) {
+    isFirstLoad = false;
+    playIntroAnimation(weatherType);
+  }
 }
 
 // Determine weather type from description
