@@ -298,6 +298,91 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
   };
 }
 
+// Get historical prediction for a specific school
+function getSchoolHistoricalPrediction(schoolName, temperature, feelsLike, snowfall, weatherType) {
+  if (!historicalData || historicalData.length === 0) return null;
+
+  // Filter historical data for this specific school
+  const schoolData = historicalData.filter(r => r.school === schoolName);
+  if (schoolData.length === 0) return null;
+
+  const currentCategory = categorizeEvent(snowfall, weatherType);
+
+  // Score each historical record by similarity to current conditions
+  const scored = schoolData.map(record => {
+    let similarity = 0;
+
+    const recordCategory = categorizeEvent(record.snowfall, record.type);
+
+    // DISQUALIFY: If snowfall difference is too large (>5 inches), skip this record
+    const snowDiff = Math.abs(record.snowfall - snowfall);
+    if (snowDiff > 5) {
+      return { ...record, similarity: 0, disqualified: true };
+    }
+
+    // Category matching
+    if (currentCategory === recordCategory) {
+      similarity += 4;
+    } else if (
+      (currentCategory === 'cold-only' && recordCategory === 'heavy-snow') ||
+      (currentCategory === 'heavy-snow' && recordCategory === 'cold-only')
+    ) {
+      similarity -= 6;
+    } else {
+      similarity -= 2;
+    }
+
+    // Temperature similarity
+    const tempDiff = Math.abs(record.temperature - temperature);
+    if (tempDiff <= 5) similarity += 3;
+    else if (tempDiff <= 10) similarity += 2;
+    else if (tempDiff <= 15) similarity += 1;
+
+    // Feels-like similarity
+    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
+    if (feelsDiff <= 5) similarity += 3;
+    else if (feelsDiff <= 10) similarity += 2;
+    else if (feelsDiff <= 15) similarity += 1;
+
+    // Snowfall similarity
+    if (snowDiff <= 0.5) similarity += 4;
+    else if (snowDiff <= 1) similarity += 3;
+    else if (snowDiff <= 2) similarity += 2;
+    else if (snowDiff <= 3) similarity += 1;
+
+    // Weather type match
+    const currentType = (weatherType || '').toLowerCase();
+    const recordType = (record.type || '').toLowerCase();
+    if (currentType && recordType && currentType === recordType) similarity += 2;
+    else if (currentType && recordType &&
+             (currentType.includes(recordType) || recordType.includes(currentType))) similarity += 1;
+
+    return { ...record, similarity };
+  });
+
+  // Filter to reasonably similar days
+  const similar = scored.filter(r => !r.disqualified && r.similarity >= 5)
+                        .sort((a, b) => b.similarity - a.similarity);
+
+  if (similar.length === 0) return null;
+
+  // Take up to 5 matches for per-school (fewer records available)
+  const matches = similar.slice(0, 5);
+
+  const closedCount = matches.filter(r => r.status === 'closed').length;
+  const delayCount = matches.filter(r => r.status === 'delay').length;
+  const totalDisruptions = closedCount + delayCount;
+
+  return {
+    matchCount: matches.length,
+    closedCount,
+    delayCount,
+    closureRate: Math.round((closedCount / matches.length) * 100),
+    delayRate: Math.round((delayCount / matches.length) * 100),
+    disruptionRate: Math.round((totalDisruptions / matches.length) * 100)
+  };
+}
+
 // Weather condition thresholds for school delays
 const THRESHOLDS = {
   // Temperature thresholds (Fahrenheit)
@@ -316,6 +401,114 @@ const THRESHOLDS = {
   // Ice accumulation (inches)
   iceAccumulation: 0.1     // Any ice = high risk
 };
+
+// Analyze hourly forecast for morning conditions and precipitation timing
+function analyzeHourlyForecast(hourlyForecast) {
+  if (!hourlyForecast || !hourlyForecast.periods || hourlyForecast.periods.length === 0) {
+    return null;
+  }
+
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Find periods for critical morning hours (4am-8am tomorrow)
+  const morningPeriods = hourlyForecast.periods.filter(period => {
+    const periodTime = new Date(period.startTime);
+    const hour = periodTime.getHours();
+    const isTomorrow = periodTime.getDate() === tomorrow.getDate() &&
+                       periodTime.getMonth() === tomorrow.getMonth();
+    return isTomorrow && hour >= 4 && hour <= 8;
+  });
+
+  // Find overnight periods (10pm tonight to 6am tomorrow)
+  const overnightPeriods = hourlyForecast.periods.filter(period => {
+    const periodTime = new Date(period.startTime);
+    const hour = periodTime.getHours();
+    const isTonight = periodTime.getDate() === now.getDate() && hour >= 22;
+    const isTomorrowEarly = periodTime.getDate() === tomorrow.getDate() && hour < 6;
+    return isTonight || isTomorrowEarly;
+  });
+
+  // Find afternoon periods (12pm-6pm tomorrow)
+  const afternoonPeriods = hourlyForecast.periods.filter(period => {
+    const periodTime = new Date(period.startTime);
+    const hour = periodTime.getHours();
+    const isTomorrow = periodTime.getDate() === tomorrow.getDate() &&
+                       periodTime.getMonth() === tomorrow.getMonth();
+    return isTomorrow && hour >= 12 && hour <= 18;
+  });
+
+  // Calculate morning conditions
+  let morningMinTemp = null;
+  let morningMaxWind = 0;
+  let morningHasPrecip = false;
+  let morningPrecipType = null;
+
+  morningPeriods.forEach(period => {
+    if (morningMinTemp === null || period.temperature < morningMinTemp) {
+      morningMinTemp = period.temperature;
+    }
+    const windSpeed = parseInt(period.windSpeed) || 0;
+    if (windSpeed > morningMaxWind) morningMaxWind = windSpeed;
+
+    const forecast = (period.shortForecast || '').toLowerCase();
+    if (forecast.includes('snow') || forecast.includes('flurries') ||
+        forecast.includes('ice') || forecast.includes('freezing') ||
+        forecast.includes('sleet')) {
+      morningHasPrecip = true;
+      if (forecast.includes('ice') || forecast.includes('freezing') || forecast.includes('sleet')) {
+        morningPrecipType = 'ice';
+      } else if (!morningPrecipType) {
+        morningPrecipType = 'snow';
+      }
+    }
+  });
+
+  // Analyze precipitation timing
+  let overnightPrecipHours = 0;
+  let afternoonPrecipHours = 0;
+
+  overnightPeriods.forEach(period => {
+    const forecast = (period.shortForecast || '').toLowerCase();
+    const hasWinterPrecip = forecast.includes('snow') || forecast.includes('ice') ||
+                            forecast.includes('freezing') || forecast.includes('sleet');
+    if (hasWinterPrecip || (period.probabilityOfPrecipitation || 0) >= 50) {
+      overnightPrecipHours++;
+    }
+  });
+
+  afternoonPeriods.forEach(period => {
+    const forecast = (period.shortForecast || '').toLowerCase();
+    const hasWinterPrecip = forecast.includes('snow') || forecast.includes('ice') ||
+                            forecast.includes('freezing') || forecast.includes('sleet');
+    if (hasWinterPrecip || (period.probabilityOfPrecipitation || 0) >= 50) {
+      afternoonPrecipHours++;
+    }
+  });
+
+  // Determine precipitation timing category
+  let precipTiming = 'none';
+  if (overnightPrecipHours >= 3 && afternoonPrecipHours < 2) {
+    precipTiming = 'overnight';  // Snow mostly overnight - worse for morning commute
+  } else if (afternoonPrecipHours >= 3 && overnightPrecipHours < 2) {
+    precipTiming = 'afternoon';  // Snow mostly afternoon - less impact on school
+  } else if (overnightPrecipHours >= 2 && afternoonPrecipHours >= 2) {
+    precipTiming = 'all-day';    // Snow throughout
+  } else if (overnightPrecipHours >= 1 || morningHasPrecip) {
+    precipTiming = 'morning';    // Some morning precipitation
+  }
+
+  return {
+    morningMinTemp,
+    morningMaxWind,
+    morningHasPrecip,
+    morningPrecipType,
+    overnightPrecipHours,
+    afternoonPrecipHours,
+    precipTiming
+  };
+}
 
 function calculateDelayProbability(currentConditions, forecast, hourlyForecast, alerts) {
   let probability = 0;
@@ -423,6 +616,53 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     });
   }
 
+  // Analyze hourly forecast for morning conditions and precipitation timing
+  const hourlyAnalysis = analyzeHourlyForecast(hourlyForecast);
+  if (hourlyAnalysis) {
+    // Morning temperature analysis (buses run 6-7am)
+    if (hourlyAnalysis.morningMinTemp !== null) {
+      // Calculate morning wind chill
+      let morningWindChill = hourlyAnalysis.morningMinTemp;
+      if (hourlyAnalysis.morningMinTemp <= 50 && hourlyAnalysis.morningMaxWind > 3) {
+        morningWindChill = 35.74 + (0.6215 * hourlyAnalysis.morningMinTemp) -
+          (35.75 * Math.pow(hourlyAnalysis.morningMaxWind, 0.16)) +
+          (0.4275 * hourlyAnalysis.morningMinTemp * Math.pow(hourlyAnalysis.morningMaxWind, 0.16));
+        morningWindChill = Math.round(morningWindChill);
+      }
+
+      if (morningWindChill <= THRESHOLDS.extremeCold) {
+        probability += 15;
+        factors.push({ factor: `Extreme cold at bus time (${morningWindChill}°F wind chill)`, impact: +15 });
+      } else if (morningWindChill <= THRESHOLDS.veryCold) {
+        probability += 10;
+        factors.push({ factor: `Very cold at bus time (${morningWindChill}°F wind chill)`, impact: +10 });
+      }
+    }
+
+    // Active precipitation during morning commute
+    if (hourlyAnalysis.morningHasPrecip) {
+      if (hourlyAnalysis.morningPrecipType === 'ice') {
+        probability += 20;
+        factors.push({ factor: 'Ice/freezing rain during morning commute', impact: +20 });
+      } else {
+        probability += 10;
+        factors.push({ factor: 'Snow during morning commute', impact: +10 });
+      }
+    }
+
+    // Precipitation timing adjustments
+    if (hourlyAnalysis.precipTiming === 'overnight') {
+      probability += 15;
+      factors.push({ factor: 'Precipitation mainly overnight (road accumulation)', impact: +15 });
+    } else if (hourlyAnalysis.precipTiming === 'afternoon') {
+      probability -= 10;
+      factors.push({ factor: 'Precipitation mainly afternoon (less morning impact)', impact: -10 });
+    } else if (hourlyAnalysis.precipTiming === 'all-day') {
+      probability += 10;
+      factors.push({ factor: 'Precipitation expected throughout the day', impact: +10 });
+    }
+  }
+
   // Historical pattern analysis
   let historicalMatch = null;
   if (currentConditions && currentConditions.temperature) {
@@ -475,15 +715,22 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
   } else {
     // No historical data - use heuristics based on severity
     // Higher probabilities lean toward closure, lower toward delay
-    if (probability >= 70) {
-      closureProbability = Math.round(probability * 0.6);
-      delayProbability = Math.round(probability * 0.4);
+    // Using 5 tiers to reduce large swings when crossing boundaries
+    if (probability >= 85) {
+      closureProbability = Math.round(probability * 0.65);
+      delayProbability = Math.round(probability * 0.35);
+    } else if (probability >= 70) {
+      closureProbability = Math.round(probability * 0.55);
+      delayProbability = Math.round(probability * 0.45);
+    } else if (probability >= 55) {
+      closureProbability = Math.round(probability * 0.45);
+      delayProbability = Math.round(probability * 0.55);
     } else if (probability >= 40) {
-      closureProbability = Math.round(probability * 0.4);
-      delayProbability = Math.round(probability * 0.6);
+      closureProbability = Math.round(probability * 0.35);
+      delayProbability = Math.round(probability * 0.65);
     } else {
-      closureProbability = Math.round(probability * 0.3);
-      delayProbability = Math.round(probability * 0.7);
+      closureProbability = Math.round(probability * 0.25);
+      delayProbability = Math.round(probability * 0.75);
     }
   }
 
@@ -523,8 +770,20 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
   };
 }
 
+// Map school codes to names used in historical data
+const SCHOOL_CODE_TO_HISTORICAL_NAME = {
+  'IASD': 'Indiana',
+  'HCSD': 'Homer-Center',
+  'MCASD': 'Marion Center',
+  'PMASD': 'Penns Manor',
+  'PLSD': 'Purchase Line',
+  'USD': 'United'
+};
+
 module.exports = {
   calculateDelayProbability,
   getSchoolStatuses,
-  INDIANA_COUNTY_SCHOOLS
+  getSchoolHistoricalPrediction,
+  INDIANA_COUNTY_SCHOOLS,
+  SCHOOL_CODE_TO_HISTORICAL_NAME
 };

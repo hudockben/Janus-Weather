@@ -3,7 +3,6 @@
 const API_BASE = '/api';
 
 // DOM Elements
-const refreshBtn = document.getElementById('refresh-btn');
 const alertsSection = document.getElementById('alerts-section');
 const alertsHeader = document.getElementById('alerts-header');
 const alertsContainer = document.getElementById('alerts-container');
@@ -16,9 +15,6 @@ const forecastContainer = document.getElementById('forecast-container');
 // Initialize
 async function init() {
   await refreshAllData();
-
-  // Event listeners
-  refreshBtn.addEventListener('click', refreshAllData);
 
   // Alerts collapsible toggle
   alertsHeader.addEventListener('click', toggleAlerts);
@@ -279,33 +275,45 @@ function renderSchoolDelay(data) {
     </div>
 
     <div class="delay-factors">
-      <h4>Contributing Factors</h4>
-      <p class="factors-explanation">Each factor adds to the overall delay/closure probability</p>
-      ${data.factors && data.factors.length > 0 ? `
-        <ul>
-          ${data.factors.map(f => `
-            <li>
-              <span>${f.factor}</span>
-              <span class="impact">+${f.impact}%</span>
-            </li>
-          `).join('')}
-        </ul>
-      ` : '<p class="no-factors">No significant weather factors detected</p>'}
+      <h4 class="collapsible-header section-toggle" data-target="factors-content">
+        <span class="caret factors-caret"></span>
+        Contributing Factors
+        <span class="factor-count">${data.factors?.length || 0}</span>
+      </h4>
+      <div id="factors-content" class="collapsible-content section-content">
+        <p class="factors-explanation">Each factor adds to the overall delay/closure probability</p>
+        ${data.factors && data.factors.length > 0 ? `
+          <ul>
+            ${data.factors.map(f => `
+              <li>
+                <span>${f.factor}</span>
+                <span class="impact">+${f.impact}%</span>
+              </li>
+            `).join('')}
+          </ul>
+        ` : '<p class="no-factors">No significant weather factors detected</p>'}
+      </div>
     </div>
 
     ${data.historicalMatch ? `
       <div class="historical-match">
-        <h4>Historical Pattern</h4>
-        <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
-        <div class="past-matches">
-          ${data.historicalMatch.topMatches.map(m => `
-            <div class="past-match-item">
-              <span class="past-date">${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-              <span class="past-type">${m.type}</span>
-              <span class="past-conditions">${m.temperature}°F / Feels ${m.feelsLike}°F${m.snowfall > 0 ? ` / ${m.snowfall}" snow` : ''}</span>
-              <span class="past-status ${m.status}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>
-            </div>
-          `).join('')}
+        <h4 class="collapsible-header section-toggle" data-target="historical-content">
+          <span class="caret historical-caret"></span>
+          Historical Pattern
+          <span class="match-count">${data.historicalMatch.matchCount} matches</span>
+        </h4>
+        <div id="historical-content" class="collapsible-content section-content">
+          <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
+          <div class="past-matches">
+            ${data.historicalMatch.topMatches.map(m => `
+              <div class="past-match-item">
+                <span class="past-date">${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                <span class="past-type">${m.type}</span>
+                <span class="past-conditions">${m.temperature}°F / Feels ${m.feelsLike}°F${m.snowfall > 0 ? ` / ${m.snowfall}" snow` : ''}</span>
+                <span class="past-status ${m.status}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
       </div>
     ` : ''}
@@ -317,8 +325,14 @@ function renderSchoolDelay(data) {
         const statusLabel = getStatusLabel(s.currentStatus);
         return `
           <div class="school-status-item">
-            <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
-            <span class="school-current-status ${statusClass}">${statusLabel}</span>
+            <div class="school-info">
+              <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
+              <span class="school-current-status ${statusClass}">${statusLabel}</span>
+            </div>
+            <div class="school-probabilities">
+              <span class="school-prob delay" title="Delay probability for ${s.shortName}">${s.delayProbability}% delay</span>
+              <span class="school-prob closure" title="Closure probability for ${s.shortName}">${s.closureProbability}% closure</span>
+            </div>
           </div>
         `;
       }).join('')}
@@ -326,6 +340,24 @@ function renderSchoolDelay(data) {
 
     <p class="delay-disclaimer">${data.disclaimer}</p>
   `;
+
+  // Attach click handlers for collapsible sections
+  attachSectionToggles();
+}
+
+// Attach toggle handlers for collapsible sections
+function attachSectionToggles() {
+  const toggles = document.querySelectorAll('.section-toggle');
+  toggles.forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const targetId = toggle.getAttribute('data-target');
+      const content = document.getElementById(targetId);
+      if (content) {
+        toggle.classList.toggle('collapsed');
+        content.classList.toggle('collapsed');
+      }
+    });
+  });
 }
 
 // Helper: Convert wind direction degrees to cardinal
