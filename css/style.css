@@ -618,6 +618,63 @@ section h2 {
   background: rgba(249, 115, 22, 0.15);
 }
 
+/* Divergence notice when historical matches have different precipitation conditions */
+.historical-diverge-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: #fde68a;
+  line-height: 1.4;
+}
+
+.diverge-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.historical-match.conditions-diverge {
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+/* Current conditions comparison row */
+.past-match-item.current-comparison {
+  background: rgba(95, 179, 162, 0.1);
+  border: 1px solid rgba(95, 179, 162, 0.25);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  border-top: none;
+}
+
+.past-match-item.current-comparison .past-school {
+  color: #5FB3A2;
+  font-weight: 700;
+}
+
+.past-match-item.current-comparison .past-date {
+  color: #5FB3A2;
+  font-style: italic;
+}
+
+.past-status-placeholder {
+  color: #6b7280;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+/* Match quality indicator */
+.match-quality {
+  font-size: 0.65rem;
+  font-weight: 400;
+  opacity: 0.7;
+  margin-left: 0.25rem;
+}
+
 @media (max-width: 768px) {
   .past-match-item {
     grid-template-columns: 1fr 1fr;

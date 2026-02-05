@@ -449,22 +449,39 @@ function renderSchoolDelay(data) {
     </div>
 
     ${data.historicalMatch ? `
-      <div class="historical-match">
+      <div class="historical-match${data.historicalMatch.conditionsDiverge ? ' conditions-diverge' : ''}">
         <h4 class="collapsible-header section-toggle" data-target="historical-content">
           <span class="caret historical-caret"></span>
           Historical Pattern
           <span class="match-count">${data.historicalMatch.matchCount} matches</span>
         </h4>
         <div id="historical-content" class="collapsible-content section-content">
+          ${data.historicalMatch.conditionsDiverge && data.historicalMatch.contextNote ? `
+            <div class="historical-diverge-notice">
+              <span class="diverge-icon">&#9888;</span>
+              <span>${data.historicalMatch.contextNote}</span>
+            </div>
+          ` : ''}
           <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
+          ${data.historicalMatch.currentConditions ? `
+            <div class="past-matches">
+              <div class="past-match-item current-comparison">
+                <span class="past-school">Today</span>
+                <span class="past-date">Current</span>
+                <span class="past-type">${data.historicalMatch.currentConditions.weatherType || 'none'}</span>
+                <span class="past-conditions">${data.historicalMatch.currentConditions.temperature}°F / Feels ${data.historicalMatch.currentConditions.feelsLike}°F / ${data.historicalMatch.currentConditions.snowfall}" snow</span>
+                <span class="past-status-placeholder">--</span>
+              </div>
+            </div>
+          ` : ''}
           <div class="past-matches">
             ${data.historicalMatch.topMatches.map(m => `
               <div class="past-match-item">
                 <span class="past-school">${m.school}</span>
                 <span class="past-date">${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                 <span class="past-type">${m.type}</span>
-                <span class="past-conditions">${m.temperature}°F / Feels ${m.feelsLike}°F${m.snowfall > 0 ? ` / ${m.snowfall}" snow` : ''}</span>
-                <span class="past-status ${m.status}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>
+                <span class="past-conditions">${m.temperature}°F / Feels ${m.feelsLike}°F / ${m.snowfall}" snow</span>
+                <span class="past-status ${m.status}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}${m.matchQuality != null ? ` <span class="match-quality">${m.matchQuality}%</span>` : ''}</span>
               </div>
             `).join('')}
           </div>
