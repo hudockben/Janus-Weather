@@ -690,13 +690,32 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     historicalMatch = getHistoricalPrediction(tempF, windChill, snowEstimate, weatherType);
 
     if (historicalMatch) {
-      // Blend historical data with threshold-based probability
-      // Weight: 40% historical, 60% threshold-based
       const historicalProb = historicalMatch.disruptionRate;
-      probability = Math.round((probability * 0.6) + (historicalProb * 0.4));
+
+      // Check for survivorship bias: if the historical dataset only contains
+      // disruption days (no "on time" records), the disruption rate will always
+      // be ~100% regardless of actual conditions. In that case, reduce the
+      // historical weight so threshold-based analysis drives the prediction.
+      const hasNormalDays = historicalData.some(r =>
+        r.status === 'on time' || r.status === 'normal' || r.status === 'open'
+      );
+
+      let historicalWeight;
+      if (!hasNormalDays && historicalProb >= 90) {
+        // Dataset only tracks disruption days - historical rate is unreliable.
+        // Scale weight based on how much the threshold-based probability
+        // corroborates the historical data (higher agreement = more trust).
+        const agreement = 1 - Math.abs(probability - historicalProb) / 100;
+        historicalWeight = 0.15 + (0.25 * agreement);
+      } else {
+        historicalWeight = 0.4;
+      }
+
+      const previousProb = probability;
+      probability = Math.round((probability * (1 - historicalWeight)) + (historicalProb * historicalWeight));
       factors.push({
         factor: `Historical pattern (${historicalMatch.matchCount} similar days: ${historicalMatch.closedCount} closed, ${historicalMatch.delayCount} delayed)`,
-        impact: Math.round(historicalProb * 0.4)
+        impact: probability - previousProb
       });
     }
   }
