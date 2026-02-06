@@ -146,6 +146,13 @@ function recordExists(historicalData, school, date) {
   );
 }
 
+// Check if today is in the winter school season (Nov-Mar)
+// when weather-related closures/delays are most likely
+function isWinterSeason(dateStr) {
+  const month = new Date(dateStr).getMonth(); // 0-indexed
+  return month >= 10 || month <= 2; // Nov(10), Dec(11), Jan(0), Feb(1), Mar(2)
+}
+
 // Main function to log today's weather and school statuses
 async function logWeatherData(options = {}) {
   const {
@@ -226,18 +233,17 @@ async function logWeatherData(options = {}) {
         continue;
       }
 
-      if (normalizedStatus === 'open' && !forceLog) {
+      // During winter season (Nov-Mar), log ALL days including open days
+      // so the prediction model has baseline data for normal vs. disruption days.
+      // Outside winter season, only log disruptions (or if forceLog is set).
+      const winterSeason = isWinterSeason(today);
+
+      if (normalizedStatus === 'open' && !winterSeason && !forceLog) {
         results.skipped.push({
           school: schoolName,
-          reason: 'School is open (no disruption to log)'
+          reason: 'School is open (outside winter season, no disruption to log)'
         });
         continue;
-      }
-
-      // Only log if there's a weather event (or forceLog)
-      if (!weatherType && !forceLog && normalizedStatus !== 'open') {
-        // Still log if there's a school disruption even without clear weather type
-        // This helps capture edge cases
       }
 
       // Create the record
@@ -247,17 +253,14 @@ async function logWeatherData(options = {}) {
         status: normalizedStatus,
         temperature: tempF || 32, // Default to freezing if unavailable
         snowfall: snowfall,
-        type: weatherType || (normalizedStatus !== 'open' ? 'unknown' : null),
+        type: weatherType || (normalizedStatus !== 'open' ? 'unknown' : 'normal'),
         feelsLike: windChill || tempF || 32
       };
 
-      // Only log disruptions (or forceLog for testing)
-      if (normalizedStatus !== 'open' || forceLog) {
-        if (!dryRun) {
-          historicalData.push(record);
-        }
-        results.logged.push(record);
+      if (!dryRun) {
+        historicalData.push(record);
       }
+      results.logged.push(record);
     }
 
     // Save if any records were logged
