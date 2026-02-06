@@ -428,12 +428,12 @@ function renderSchoolDelay(data) {
     </div>
 
     <div class="delay-factors">
-      <h4 class="collapsible-header section-toggle" data-target="factors-content">
+      <h4 class="collapsible-header section-toggle collapsed" data-target="factors-content">
         <span class="caret factors-caret"></span>
         Contributing Factors
         <span class="factor-count">${data.factors?.length || 0}</span>
       </h4>
-      <div id="factors-content" class="collapsible-content section-content">
+      <div id="factors-content" class="collapsible-content section-content collapsed">
         <p class="factors-explanation">Each factor adds to the overall delay/closure probability</p>
         ${data.factors && data.factors.length > 0 ? `
           <ul>
@@ -450,12 +450,12 @@ function renderSchoolDelay(data) {
 
     ${data.historicalMatch ? `
       <div class="historical-match">
-        <h4 class="collapsible-header section-toggle" data-target="historical-content">
+        <h4 class="collapsible-header section-toggle collapsed" data-target="historical-content">
           <span class="caret historical-caret"></span>
           Historical Pattern
           <span class="match-count">${data.historicalMatch.matchCount} matches</span>
         </h4>
-        <div id="historical-content" class="collapsible-content section-content">
+        <div id="historical-content" class="collapsible-content section-content collapsed">
           <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
           <div class="past-matches">
             ${data.historicalMatch.topMatches.map(m => `

@@ -576,33 +576,49 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     // Look at tonight and tomorrow morning periods
     const relevantPeriods = forecast.periods.slice(0, 4);
 
+    // Track what precipitation factors have been added to avoid redundancies
+    // e.g. "Light snow forecast (2 inches)" and "Snow in forecast" shouldn't both appear
+    let snowFactorAdded = false;
+    let iceFactorAdded = false;
+    let bestSnowAmount = 0;
+
+    // First pass: find the highest snow amount across all periods
+    relevantPeriods.forEach(period => {
+      const desc = (period.detailedForecast || period.shortForecast || '').toLowerCase();
+      const snowMatch = desc.match(/(\d+)\s*(?:to\s*(\d+))?\s*inch/);
+      if (snowMatch) {
+        const amount = snowMatch[2] ? parseInt(snowMatch[2]) : parseInt(snowMatch[1]);
+        if (amount > bestSnowAmount) bestSnowAmount = amount;
+      }
+    });
+
     relevantPeriods.forEach(period => {
       const desc = (period.detailedForecast || period.shortForecast || '').toLowerCase();
 
-      // Check for snow amounts
-      const snowMatch = desc.match(/(\d+)\s*(?:to\s*(\d+))?\s*inch/);
-      if (snowMatch) {
-        const snowAmount = snowMatch[2] ? parseInt(snowMatch[2]) : parseInt(snowMatch[1]);
-        if (snowAmount >= THRESHOLDS.heavySnow) {
+      // Check for snow amounts — only add the best (highest) snow amount factor once
+      if (!snowFactorAdded && bestSnowAmount > 0) {
+        if (bestSnowAmount >= THRESHOLDS.heavySnow) {
           probability += 45;
-          factors.push({ factor: `Heavy snow forecast (${snowAmount}+ inches)`, impact: +45 });
-        } else if (snowAmount >= THRESHOLDS.moderateSnow) {
+          factors.push({ factor: `Heavy snow forecast (${bestSnowAmount}+ inches)`, impact: +45 });
+        } else if (bestSnowAmount >= THRESHOLDS.moderateSnow) {
           probability += 30;
-          factors.push({ factor: `Moderate snow forecast (${snowAmount} inches)`, impact: +30 });
-        } else if (snowAmount >= THRESHOLDS.lightSnow) {
+          factors.push({ factor: `Moderate snow forecast (${bestSnowAmount} inches)`, impact: +30 });
+        } else if (bestSnowAmount >= THRESHOLDS.lightSnow) {
           probability += 15;
-          factors.push({ factor: `Light snow forecast (${snowAmount} inches)`, impact: +15 });
+          factors.push({ factor: `Light snow forecast (${bestSnowAmount} inches)`, impact: +15 });
         }
+        snowFactorAdded = true;
       }
 
-      // Check for ice/freezing rain
-      if (desc.includes('ice') || desc.includes('freezing rain') || desc.includes('sleet')) {
+      // Check for ice/freezing rain — only add once
+      if (!iceFactorAdded && (desc.includes('ice') || desc.includes('freezing rain') || desc.includes('sleet'))) {
         probability += 35;
         factors.push({ factor: 'Ice/freezing rain in forecast', impact: +35 });
+        iceFactorAdded = true;
       }
 
-      // Check for general snow mention without amounts
-      if (!snowMatch && (desc.includes('snow') || desc.includes('flurries'))) {
+      // Check for general snow mention without amounts — only if no specific snow factor was added
+      if (!snowFactorAdded && (desc.includes('snow') || desc.includes('flurries'))) {
         if (desc.includes('heavy')) {
           probability += 25;
           factors.push({ factor: 'Heavy snow mentioned', impact: +25 });
@@ -613,6 +629,7 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
           probability += 15;
           factors.push({ factor: 'Snow in forecast', impact: +15 });
         }
+        snowFactorAdded = true;
       }
     });
   }
