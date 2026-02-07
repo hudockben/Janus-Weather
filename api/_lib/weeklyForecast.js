@@ -175,6 +175,10 @@ function getHistoricalPredictionForDay(temperature, feelsLike, snowfall, weather
 
     if (snowDiff > 5) return { ...record, similarity: 0, disqualified: true };
 
+    // DISQUALIFY: If feels-like difference is too large (>20°F), skip this record
+    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
+    if (feelsDiff > 20) return { ...record, similarity: 0, disqualified: true };
+
     if (currentCategory === recordCategory) similarity += 4;
     else if ((currentCategory === 'cold-only' && recordCategory === 'heavy-snow') ||
              (currentCategory === 'heavy-snow' && recordCategory === 'cold-only')) similarity -= 6;
@@ -185,10 +189,11 @@ function getHistoricalPredictionForDay(temperature, feelsLike, snowfall, weather
     else if (tempDiff <= 10) similarity += 2;
     else if (tempDiff <= 15) similarity += 1;
 
-    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
-    if (feelsDiff <= 5) similarity += 3;
-    else if (feelsDiff <= 10) similarity += 2;
-    else if (feelsDiff <= 15) similarity += 1;
+    // Feels-like similarity - higher weight since wind chill drives school decisions
+    if (feelsDiff <= 5) similarity += 4;
+    else if (feelsDiff <= 10) similarity += 3;
+    else if (feelsDiff <= 15) similarity += 2;
+    else similarity += 1;
 
     if (snowDiff <= 0.5) similarity += 4;
     else if (snowDiff <= 1) similarity += 3;

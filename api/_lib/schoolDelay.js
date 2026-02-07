@@ -221,6 +221,14 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
       return { ...record, similarity: 0, disqualified: true };
     }
 
+    // DISQUALIFY: If feels-like difference is too large (>20°F), skip this record
+    // Wind chill is a primary factor in school decisions - a day that feels like
+    // 10°F is fundamentally different from one that feels like -17°F
+    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
+    if (feelsDiff > 20) {
+      return { ...record, similarity: 0, disqualified: true };
+    }
+
     // Category matching - critical for finding truly similar days
     if (currentCategory === recordCategory) {
       similarity += 4; // Bonus for matching category
@@ -241,11 +249,11 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
     else if (tempDiff <= 10) similarity += 2;
     else if (tempDiff <= 15) similarity += 1;
 
-    // Feels-like similarity
-    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
-    if (feelsDiff <= 5) similarity += 3;
-    else if (feelsDiff <= 10) similarity += 2;
-    else if (feelsDiff <= 15) similarity += 1;
+    // Feels-like similarity - higher weight since wind chill drives school decisions
+    if (feelsDiff <= 5) similarity += 4;
+    else if (feelsDiff <= 10) similarity += 3;
+    else if (feelsDiff <= 15) similarity += 2;
+    else similarity += 1;
 
     // Snowfall similarity - stricter scoring
     if (snowDiff <= 0.5) similarity += 4;
@@ -321,6 +329,12 @@ function getSchoolHistoricalPrediction(schoolName, temperature, feelsLike, snowf
       return { ...record, similarity: 0, disqualified: true };
     }
 
+    // DISQUALIFY: If feels-like difference is too large (>20°F), skip this record
+    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
+    if (feelsDiff > 20) {
+      return { ...record, similarity: 0, disqualified: true };
+    }
+
     // Category matching
     if (currentCategory === recordCategory) {
       similarity += 4;
@@ -339,11 +353,11 @@ function getSchoolHistoricalPrediction(schoolName, temperature, feelsLike, snowf
     else if (tempDiff <= 10) similarity += 2;
     else if (tempDiff <= 15) similarity += 1;
 
-    // Feels-like similarity
-    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
-    if (feelsDiff <= 5) similarity += 3;
-    else if (feelsDiff <= 10) similarity += 2;
-    else if (feelsDiff <= 15) similarity += 1;
+    // Feels-like similarity - higher weight since wind chill drives school decisions
+    if (feelsDiff <= 5) similarity += 4;
+    else if (feelsDiff <= 10) similarity += 3;
+    else if (feelsDiff <= 15) similarity += 2;
+    else similarity += 1;
 
     // Snowfall similarity
     if (snowDiff <= 0.5) similarity += 4;
