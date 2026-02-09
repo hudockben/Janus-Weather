@@ -791,6 +791,23 @@ section h2 {
   }
 }
 
+.prediction-accuracy {
+  text-align: center;
+  padding: 0.5rem 0;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  color: #B8C0C8;
+}
+
+.prediction-accuracy .accuracy-label {
+  color: #8a9bae;
+}
+
+.prediction-accuracy .accuracy-value {
+  color: #4CAF50;
+  font-weight: 600;
+}
+
 .delay-disclaimer {
   font-size: 0.8rem;
   color: #B8C0C8;
