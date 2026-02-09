@@ -157,6 +157,11 @@ function predictDayStatus(tempHigh, tempLow, windMph, snowfall, weatherType, fee
 function getHistoricalPredictionForDay(temperature, feelsLike, snowfall, weatherType) {
   if (!historicalData || historicalData.length === 0) return null;
 
+  // Skip matching for mild/non-winter conditions - our dataset is winter events
+  // and matching against it on mild days produces misleading results
+  const wt = (weatherType || '').toLowerCase();
+  if (snowfall === 0 && !wt.includes('snow') && !wt.includes('ice') && !wt.includes('frigid') && !wt.includes('cold')) return null;
+
   function categorize(snow, type) {
     const t = (type || '').toLowerCase();
     if (t.includes('ice') || t.includes('freezing')) return 'ice';
