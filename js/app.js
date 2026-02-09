@@ -452,13 +452,37 @@ function renderSchoolDelay(data) {
       <div class="historical-match">
         <h4 class="collapsible-header section-toggle collapsed" data-target="historical-content">
           <span class="caret historical-caret"></span>
-          Historical Pattern
+          Today's Historical Pattern
           <span class="match-count">${data.historicalMatch.matchCount} matches</span>
         </h4>
         <div id="historical-content" class="collapsible-content section-content collapsed">
           <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days with today's current conditions: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
           <div class="past-matches">
             ${data.historicalMatch.topMatches.map(m => `
+              <div class="past-match-item">
+                <span class="past-school">${m.school}</span>
+                <span class="past-date">${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                <span class="past-type">${m.type}</span>
+                <span class="past-conditions">${m.temperature}°F / Feels ${m.feelsLike}°F${m.snowfall > 0 ? ` / ${m.snowfall}" snow` : ''}</span>
+                <span class="past-status ${m.status}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    ` : ''}
+
+    ${data.tomorrowHistoricalMatch ? `
+      <div class="historical-match tomorrow-historical">
+        <h4 class="collapsible-header section-toggle collapsed" data-target="tomorrow-historical-content">
+          <span class="caret historical-caret"></span>
+          Tomorrow's Historical Pattern
+          <span class="match-count">${data.tomorrowHistoricalMatch.matchCount} matches</span>
+        </h4>
+        <div id="tomorrow-historical-content" class="collapsible-content section-content collapsed">
+          <p>Based on <strong>${data.tomorrowHistoricalMatch.matchCount}</strong> similar past days with tomorrow's forecast: <strong>${data.tomorrowHistoricalMatch.closedCount}</strong> resulted in closures, <strong>${data.tomorrowHistoricalMatch.delayCount}</strong> in delays</p>
+          <div class="past-matches">
+            ${data.tomorrowHistoricalMatch.topMatches.map(m => `
               <div class="past-match-item">
                 <span class="past-school">${m.school}</span>
                 <span class="past-date">${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
