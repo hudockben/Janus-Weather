@@ -7,6 +7,7 @@ const { getCurrentConditions, getForecast, getAlerts } = require('./noaa');
 const { getSchoolStatuses, INDIANA_COUNTY_SCHOOLS } = require('./schoolDelay');
 
 const HISTORICAL_DATA_PATH = path.join(__dirname, 'historicalData.json');
+const NON_WEATHER_CLOSURES_PATH = path.join(__dirname, 'nonWeatherClosures.json');
 
 // Map school codes to names used in historical data
 const SCHOOL_CODE_TO_NAME = {
@@ -17,6 +18,27 @@ const SCHOOL_CODE_TO_NAME = {
   'PLSD': 'Purchase Line',
   'USD': 'United'
 };
+
+// Load non-weather closure dates (inservice days, holidays, etc.)
+function loadNonWeatherClosures() {
+  try {
+    const data = fs.readFileSync(NON_WEATHER_CLOSURES_PATH, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    return [];
+  }
+}
+
+// Check if a school has a non-weather closure on a given date
+function getNonWeatherClosure(date, schoolName) {
+  const closures = loadNonWeatherClosures();
+  return closures.find(c => {
+    if (c.date !== date) return false;
+    if (c.schools === 'all') return true;
+    if (Array.isArray(c.schools)) return c.schools.includes(schoolName);
+    return c.schools === schoolName;
+  });
+}
 
 // Normalize status to match historical data format
 function normalizeStatus(status) {
@@ -221,6 +243,18 @@ async function logWeatherData(options = {}) {
         results.skipped.push({
           school: schoolName,
           reason: 'Record already exists for today'
+        });
+        continue;
+      }
+
+      // Skip non-weather closures (inservice days, holidays, etc.)
+      // These would skew the data by associating weather conditions with
+      // closures that had nothing to do with weather
+      const nonWeatherClosure = getNonWeatherClosure(today, schoolName);
+      if (nonWeatherClosure) {
+        results.skipped.push({
+          school: schoolName,
+          reason: `Non-weather closure: ${nonWeatherClosure.reason}`
         });
         continue;
       }
