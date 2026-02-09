@@ -456,7 +456,7 @@ function renderSchoolDelay(data) {
           <span class="match-count">${data.historicalMatch.matchCount} matches</span>
         </h4>
         <div id="historical-content" class="collapsible-content section-content collapsed">
-          <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
+          <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days with today's current conditions: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
           <div class="past-matches">
             ${data.historicalMatch.topMatches.map(m => `
               <div class="past-match-item">
