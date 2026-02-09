@@ -1,31 +1,6 @@
 // School Delay Prediction for Indiana County, PA
 // Analyzes weather conditions to estimate delay/closure probability
 
-const fs = require('fs');
-const path = require('path');
-
-// Load non-weather closure dates (inservice days, holidays, etc.)
-function loadNonWeatherClosures() {
-  try {
-    const data = fs.readFileSync(path.join(__dirname, 'nonWeatherClosures.json'), 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    return [];
-  }
-}
-
-// Check if a school has a non-weather closure on a given date
-// schoolIdentifiers: array of names/codes to match against (e.g. ['IASD', 'Indiana', 'Indiana Area'])
-function getNonWeatherClosure(date, ...schoolIdentifiers) {
-  const closures = loadNonWeatherClosures();
-  return closures.find(c => {
-    if (c.date !== date) return false;
-    if (c.schools === 'all') return true;
-    const schoolList = Array.isArray(c.schools) ? c.schools : [c.schools];
-    return schoolIdentifiers.some(id => schoolList.includes(id));
-  });
-}
-
 const INDIANA_COUNTY_SCHOOLS = [
   {
     name: 'Indiana Area School District',
@@ -189,7 +164,6 @@ async function getSchoolStatuses() {
   }
 
   const statuses = {};
-  const today = new Date().toISOString().split('T')[0];
 
   for (const school of INDIANA_COUNTY_SCHOOLS) {
     let status = parseSchoolStatus(school.code, html);
@@ -197,19 +171,6 @@ async function getSchoolStatuses() {
     // If source is available but school not mentioned, assume open
     if (status === 'unknown' && html) {
       status = 'open';
-    }
-
-    // Check for non-weather closures (inservice days, holidays, etc.)
-    const historicalName = SCHOOL_CODE_TO_HISTORICAL_NAME[school.code];
-    const nonWeatherClosure = getNonWeatherClosure(today, school.code, school.shortName, historicalName);
-    if (nonWeatherClosure) {
-      statuses[school.code] = {
-        status: `closed (${nonWeatherClosure.reason.toLowerCase()})`,
-        source: 'scheduled',
-        lastChecked: new Date().toISOString(),
-        nonWeatherClosure: true
-      };
-      continue;
     }
 
     statuses[school.code] = {
