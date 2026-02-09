@@ -823,6 +823,7 @@ const SCHOOL_CODE_TO_HISTORICAL_NAME = {
 
 module.exports = {
   calculateDelayProbability,
+  getHistoricalPrediction,
   getSchoolStatuses,
   getSchoolHistoricalPrediction,
   INDIANA_COUNTY_SCHOOLS,
