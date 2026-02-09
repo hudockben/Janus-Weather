@@ -47,6 +47,7 @@ function normalizeStatus(status) {
   if (s === 'closed' || s.includes('remote')) return 'closed';
   if (s.includes('delay')) return 'delay';
   if (s.includes('early dismissal')) return 'early dismissal';
+  if (s.includes('flexible instruction')) return 'flexible instruction day';
   if (s === 'open') return 'open';
   return null; // Unknown status, don't log
 }
