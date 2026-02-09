@@ -1,5 +1,6 @@
 const { getCurrentConditions, getForecast, getHourlyForecast, getAlerts } = require('../_lib/noaa');
 const { calculateDelayProbability, getSchoolStatuses, getSchoolHistoricalPrediction, INDIANA_COUNTY_SCHOOLS, SCHOOL_CODE_TO_HISTORICAL_NAME } = require('../_lib/schoolDelay');
+const { getPredictionAccuracy } = require('../_lib/weatherLogger');
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -95,9 +96,13 @@ module.exports = async (req, res) => {
       };
     });
 
+    // Get prediction accuracy stats
+    const accuracy = getPredictionAccuracy();
+
     res.json({
       location: 'Indiana County, PA',
       timestamp: new Date().toISOString(),
+      predictionAccuracy: accuracy,
       weather: {
         current: currentConditions ? {
           temperature: currentConditions.temperature?.fahrenheit,

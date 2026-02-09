@@ -4,10 +4,11 @@
 const fs = require('fs');
 const path = require('path');
 const { getCurrentConditions, getForecast, getAlerts } = require('./noaa');
-const { getSchoolStatuses, INDIANA_COUNTY_SCHOOLS } = require('./schoolDelay');
+const { getSchoolStatuses, calculateDelayProbability, getSchoolHistoricalPrediction, INDIANA_COUNTY_SCHOOLS, SCHOOL_CODE_TO_HISTORICAL_NAME } = require('./schoolDelay');
 
 const HISTORICAL_DATA_PATH = path.join(__dirname, 'historicalData.json');
 const NON_WEATHER_CLOSURES_PATH = path.join(__dirname, 'nonWeatherClosures.json');
+const PREDICTION_LOG_PATH = path.join(__dirname, 'predictionLog.json');
 
 // Map school codes to names used in historical data
 const SCHOOL_CODE_TO_NAME = {
@@ -303,6 +304,29 @@ async function logWeatherData(options = {}) {
       saveHistoricalData(historicalData);
     }
 
+    // --- Prediction accuracy tracking ---
+    if (!dryRun) {
+      try {
+        const predictionLog = loadPredictionLog();
+
+        // Resolve yesterday's predictions with today's actual statuses
+        const resolved = resolvePredictions(predictionLog, schoolStatuses, today);
+
+        // Save predictions for tomorrow
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        const prediction = calculateDelayProbability(currentConditions, forecast, null, alerts?.alerts || []);
+        const saved = saveTomorrowPredictions(predictionLog, prediction, currentConditions, forecast, schoolStatuses, tomorrowStr);
+
+        savePredictionLog(predictionLog);
+        results.predictions = { resolved, savedForTomorrow: saved };
+      } catch (error) {
+        results.errors.push({ type: 'prediction_tracking', message: error.message });
+      }
+    }
+
     results.summary = {
       totalSchools: INDIANA_COUNTY_SCHOOLS.length,
       recorded: results.logged.length,
@@ -327,6 +351,119 @@ async function logWeatherData(options = {}) {
   }
 }
 
+// --- Prediction Accuracy Tracking ---
+
+function loadPredictionLog() {
+  try {
+    const data = fs.readFileSync(PREDICTION_LOG_PATH, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    return [];
+  }
+}
+
+function savePredictionLog(log) {
+  fs.writeFileSync(PREDICTION_LOG_PATH, JSON.stringify(log, null, 2));
+}
+
+// Resolve yesterday's predictions by comparing with today's actual statuses
+function resolvePredictions(predictionLog, schoolStatuses, today) {
+  let resolved = 0;
+  for (const entry of predictionLog) {
+    if (entry.date === today && entry.actualStatus === null) {
+      // Find actual status for this school
+      const schoolCode = Object.keys(SCHOOL_CODE_TO_NAME).find(
+        code => SCHOOL_CODE_TO_NAME[code] === entry.school
+      );
+      const statusInfo = schoolStatuses[schoolCode];
+      const actual = normalizeStatus(statusInfo?.status);
+      if (!actual) continue;
+
+      entry.actualStatus = actual;
+      const actualIsDisruption = actual !== 'open';
+      const predictedDisruption = entry.predictedDisruption;
+      entry.correct = predictedDisruption === actualIsDisruption;
+      resolved++;
+    }
+  }
+  return resolved;
+}
+
+// Save predictions for tomorrow based on current weather
+function saveTomorrowPredictions(predictionLog, prediction, currentConditions, forecast, schoolStatuses, tomorrow) {
+  // Skip if predictions already exist for tomorrow
+  if (predictionLog.some(e => e.date === tomorrow && e.actualStatus === null)) return 0;
+
+  const tempF = currentConditions?.temperature?.fahrenheit ?? 32;
+  const windMph = currentConditions?.windSpeed?.mph || 0;
+  let windChill = tempF;
+  if (tempF <= 50 && windMph > 3) {
+    windChill = 35.74 + (0.6215 * tempF) - (35.75 * Math.pow(windMph, 0.16)) +
+                (0.4275 * tempF * Math.pow(windMph, 0.16));
+    windChill = Math.round(windChill);
+  }
+
+  let snowEstimate = 0;
+  let weatherType = '';
+  if (forecast && forecast.periods) {
+    const relevantText = forecast.periods.slice(0, 4)
+      .map(p => (p.detailedForecast || p.shortForecast || '').toLowerCase()).join(' ');
+    const snowMatch = relevantText.match(/(\d+)\s*(?:to\s*(\d+))?\s*inch/);
+    if (snowMatch) snowEstimate = snowMatch[2] ? parseInt(snowMatch[2]) : parseInt(snowMatch[1]);
+    if (relevantText.includes('ice') || relevantText.includes('freezing rain')) weatherType = 'ice';
+    else if (relevantText.includes('snow')) weatherType = 'snow';
+    else if (windChill <= 10) weatherType = 'frigid temperature';
+  }
+
+  let saved = 0;
+  for (const school of INDIANA_COUNTY_SCHOOLS) {
+    const schoolName = SCHOOL_CODE_TO_NAME[school.code];
+    const historicalName = SCHOOL_CODE_TO_HISTORICAL_NAME[school.code];
+    const schoolPrediction = getSchoolHistoricalPrediction(
+      historicalName, tempF, windChill, snowEstimate, weatherType
+    );
+
+    let delayProb = prediction.delayProbability;
+    let closureProb = prediction.closureProbability;
+    if (schoolPrediction && schoolPrediction.matchCount >= 2) {
+      delayProb = Math.round((prediction.delayProbability * 0.6) + (schoolPrediction.delayRate * 0.4));
+      closureProb = Math.round((prediction.closureProbability * 0.6) + (schoolPrediction.closureRate * 0.4));
+    }
+
+    const maxProb = Math.max(delayProb, closureProb);
+    const predictedDisruption = maxProb >= 40;
+
+    predictionLog.push({
+      date: tomorrow,
+      school: schoolName,
+      delayProbability: delayProb,
+      closureProbability: closureProb,
+      predictedDisruption,
+      actualStatus: null,
+      correct: null
+    });
+    saved++;
+  }
+  return saved;
+}
+
+// Get prediction accuracy stats
+function getPredictionAccuracy() {
+  const log = loadPredictionLog();
+  const resolved = log.filter(e => e.correct !== null);
+  if (resolved.length === 0) return null;
+
+  // Last 30 resolved predictions
+  const recent = resolved.slice(-30);
+  const correctCount = recent.filter(e => e.correct).length;
+
+  return {
+    total: recent.length,
+    correct: correctCount,
+    accuracy: Math.round((correctCount / recent.length) * 100)
+  };
+}
+
 // Get logging status (check what would be logged without actually logging)
 async function getLoggingPreview() {
   return logWeatherData({ dryRun: true, forceLog: true });
@@ -336,5 +473,6 @@ module.exports = {
   logWeatherData,
   getLoggingPreview,
   loadHistoricalData,
+  getPredictionAccuracy,
   SCHOOL_CODE_TO_NAME
 };

@@ -496,6 +496,13 @@ function renderSchoolDelay(data) {
       }).join('')}
     </div>
 
+    ${data.predictionAccuracy ? `
+      <div class="prediction-accuracy">
+        <span class="accuracy-label">Model Accuracy:</span>
+        <span class="accuracy-value">${data.predictionAccuracy.correct}/${data.predictionAccuracy.total} correct (${data.predictionAccuracy.accuracy}%)</span>
+      </div>
+    ` : ''}
+
     <p class="delay-disclaimer">${data.disclaimer}</p>
   `;
 
