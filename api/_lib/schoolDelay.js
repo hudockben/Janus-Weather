@@ -206,6 +206,11 @@ function categorizeEvent(snow, type) {
 function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) {
   if (!historicalData || historicalData.length === 0) return null;
 
+  // Skip matching for mild/non-winter conditions - our dataset is winter events
+  // and matching against it on mild days produces misleading results
+  const type = (weatherType || '').toLowerCase();
+  if (snowfall === 0 && !type.includes('snow') && !type.includes('ice') && !type.includes('frigid') && !type.includes('cold')) return null;
+
   const currentCategory = categorizeEvent(snowfall, weatherType);
 
   // Score each historical record by similarity to current conditions
@@ -310,6 +315,10 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
 // Get historical prediction for a specific school
 function getSchoolHistoricalPrediction(schoolName, temperature, feelsLike, snowfall, weatherType) {
   if (!historicalData || historicalData.length === 0) return null;
+
+  // Skip matching for mild/non-winter conditions
+  const type = (weatherType || '').toLowerCase();
+  if (snowfall === 0 && !type.includes('snow') && !type.includes('ice') && !type.includes('frigid') && !type.includes('cold')) return null;
 
   // Filter historical data for this specific school
   const schoolData = historicalData.filter(r => r.school === schoolName);
