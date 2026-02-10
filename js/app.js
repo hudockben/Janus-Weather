@@ -20,6 +20,15 @@ async function init() {
   // Alerts collapsible toggle
   alertsHeader.addEventListener('click', toggleAlerts);
 
+  // Forecast collapsible toggle
+  const forecastToggle = document.querySelector('.forecast .section-toggle');
+  if (forecastToggle) {
+    forecastToggle.addEventListener('click', () => {
+      forecastToggle.classList.toggle('collapsed');
+      forecastContainer.classList.toggle('collapsed');
+    });
+  }
+
   // Auto-refresh every 10 minutes
   setInterval(refreshAllData, 600000);
 }
@@ -513,7 +522,7 @@ function renderSchoolDelay(data) {
 
 // Attach toggle handlers for collapsible sections
 function attachSectionToggles() {
-  const toggles = document.querySelectorAll('.section-toggle');
+  const toggles = schoolDelayContainer.querySelectorAll('.section-toggle');
   toggles.forEach(toggle => {
     toggle.addEventListener('click', () => {
       const targetId = toggle.getAttribute('data-target');
