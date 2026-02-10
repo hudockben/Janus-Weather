@@ -45,8 +45,11 @@
     </section>
 
     <section class="forecast">
-      <h2>7-Day Forecast</h2>
-      <div id="forecast-container" class="loading">
+      <h2 class="collapsible-header section-toggle collapsed" data-target="forecast-container">
+        <span class="caret forecast-caret"></span>
+        7-Day Forecast
+      </h2>
+      <div id="forecast-container" class="collapsible-content collapsed loading">
         <p>Loading forecast...</p>
       </div>
     </section>

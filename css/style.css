@@ -319,6 +319,10 @@ section h2 {
   border-top-color: #a78bfa;
 }
 
+.collapsible-header .caret.forecast-caret {
+  border-top-color: #fbbf24;
+}
+
 /* Count badges for collapsible sections */
 .collapsible-header .factor-count,
 .collapsible-header .match-count {
