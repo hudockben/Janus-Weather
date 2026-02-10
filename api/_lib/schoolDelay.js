@@ -701,8 +701,8 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     }
   }
 
-  // Cap probability at 95% (never 100% certain)
-  probability = Math.min(probability, 95);
+  // Clamp probability to valid range [0, 95]
+  probability = Math.max(0, Math.min(probability, 95));
 
   // Calculate separate delay and closure probabilities based on historical patterns
   let delayProbability, closureProbability;
@@ -710,8 +710,8 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     // Split the probability based on historical closure vs delay rates
     const closureRatio = historicalMatch.closureRate / historicalMatch.disruptionRate;
     const delayRatio = historicalMatch.delayRate / historicalMatch.disruptionRate;
-    closureProbability = Math.round(probability * closureRatio);
-    delayProbability = Math.round(probability * delayRatio);
+    closureProbability = Math.max(0, Math.round(probability * closureRatio));
+    delayProbability = Math.max(0, Math.round(probability * delayRatio));
   } else {
     // No historical data - use heuristics based on severity
     // Higher probabilities lean toward closure, lower toward delay
