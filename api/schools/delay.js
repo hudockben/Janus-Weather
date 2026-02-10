@@ -63,12 +63,12 @@ module.exports = async (req, res) => {
       let closureProbability = prediction.closureProbability;
 
       if (schoolPrediction && schoolPrediction.matchCount >= 2) {
-        delayProbability = Math.round(
+        delayProbability = Math.max(0, Math.round(
           (prediction.delayProbability * 0.6) + (schoolPrediction.delayRate * 0.4)
-        );
-        closureProbability = Math.round(
+        ));
+        closureProbability = Math.max(0, Math.round(
           (prediction.closureProbability * 0.6) + (schoolPrediction.closureRate * 0.4)
-        );
+        ));
       }
 
       // Calculate combined probability and determine risk tier
