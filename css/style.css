@@ -797,19 +797,60 @@ section h2 {
 
 .prediction-accuracy {
   text-align: center;
-  padding: 0.5rem 0;
-  margin-bottom: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
   font-size: 0.85rem;
   color: #B8C0C8;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.prediction-accuracy .accuracy-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .prediction-accuracy .accuracy-label {
   color: #8a9bae;
+  font-weight: 500;
 }
 
 .prediction-accuracy .accuracy-value {
   color: #4CAF50;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.prediction-accuracy .accuracy-collecting {
+  color: #F0AD4E;
+  font-style: italic;
+}
+
+.prediction-accuracy .accuracy-detail {
+  font-size: 0.75rem;
+  color: #6b7a8d;
+  margin-bottom: 0.4rem;
+}
+
+.accuracy-bar-container {
+  width: 100%;
+  max-width: 200px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  margin: 0.4rem auto 0;
+  overflow: hidden;
+}
+
+.accuracy-bar {
+  height: 100%;
+  background: #4CAF50;
+  border-radius: 2px;
+  transition: width 0.5s ease;
 }
 
 .delay-disclaimer {
