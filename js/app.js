@@ -506,12 +506,26 @@ function renderSchoolDelay(data) {
       }).join('')}
     </div>
 
-    ${data.predictionAccuracy ? `
-      <div class="prediction-accuracy">
-        <span class="accuracy-label">Model Accuracy:</span>
-        <span class="accuracy-value">${data.predictionAccuracy.correct}/${data.predictionAccuracy.total} correct (${data.predictionAccuracy.accuracy}%)</span>
-      </div>
-    ` : ''}
+    <div class="prediction-accuracy">
+      ${data.predictionAccuracy && data.predictionAccuracy.status === 'active' ? `
+        <div class="accuracy-header">
+          <span class="accuracy-label">Self-Audit:</span>
+          <span class="accuracy-value">${data.predictionAccuracy.accuracy}%</span>
+        </div>
+        <div class="accuracy-detail">
+          ${data.predictionAccuracy.correct}/${data.predictionAccuracy.total} recent predictions correct${data.predictionAccuracy.streak > 1 ? ` &middot; ${data.predictionAccuracy.streak} correct in a row` : ''}${data.predictionAccuracy.liveCount > 0 ? '' : ' &middot; Based on historical backtest'}
+        </div>
+        <div class="accuracy-bar-container">
+          <div class="accuracy-bar" style="width: ${data.predictionAccuracy.accuracy}%"></div>
+        </div>
+      ` : `
+        <div class="accuracy-header">
+          <span class="accuracy-label">Self-Audit:</span>
+          <span class="accuracy-collecting">Collecting prediction data&hellip;</span>
+        </div>
+        <div class="accuracy-detail">Accuracy will appear after predictions are verified against actual outcomes.</div>
+      `}
+    </div>
 
     <p class="delay-disclaimer">${data.disclaimer}</p>
   `;

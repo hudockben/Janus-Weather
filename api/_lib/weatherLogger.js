@@ -451,16 +451,47 @@ function saveTomorrowPredictions(predictionLog, prediction, currentConditions, f
 function getPredictionAccuracy() {
   const log = loadPredictionLog();
   const resolved = log.filter(e => e.correct !== null);
-  if (resolved.length === 0) return null;
+  const pending = log.filter(e => e.correct === null);
+
+  if (resolved.length === 0) {
+    return {
+      total: 0,
+      correct: 0,
+      accuracy: 0,
+      status: pending.length > 0 ? 'collecting' : 'no-data',
+      pendingCount: pending.length,
+      totalResolved: 0
+    };
+  }
 
   // Last 30 resolved predictions
   const recent = resolved.slice(-30);
   const correctCount = recent.filter(e => e.correct).length;
 
+  // Calculate current streak (consecutive correct predictions from most recent)
+  let streak = 0;
+  for (let i = resolved.length - 1; i >= 0; i--) {
+    if (resolved[i].correct) streak++;
+    else break;
+  }
+
+  // Find the most recent resolved prediction date
+  const lastResolvedDate = resolved[resolved.length - 1]?.date || null;
+
+  // Count how many are from live predictions vs backtest seeds
+  const liveCount = recent.filter(e => e.source !== 'backtest').length;
+
   return {
     total: recent.length,
     correct: correctCount,
-    accuracy: Math.round((correctCount / recent.length) * 100)
+    accuracy: Math.round((correctCount / recent.length) * 100),
+    status: 'active',
+    streak,
+    lastResolvedDate,
+    pendingCount: pending.length,
+    totalResolved: resolved.length,
+    liveCount,
+    backtestCount: recent.length - liveCount
   };
 }
 

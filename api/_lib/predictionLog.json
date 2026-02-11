@@ -1,1 +1,912 @@
-[]
+[
+  {
+    "date": "2021-01-09",
+    "school": "Indiana",
+    "delayProbability": 33,
+    "closureProbability": 27,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2022-02-04",
+    "school": "Indiana",
+    "delayProbability": 36,
+    "closureProbability": 29,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2022-02-18",
+    "school": "Indiana",
+    "delayProbability": 33,
+    "closureProbability": 62,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2022-12-15",
+    "school": "Indiana",
+    "delayProbability": 30,
+    "closureProbability": 25,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2023-01-25",
+    "school": "United",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-09",
+    "school": "Indiana",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-09",
+    "school": "Penns Manor",
+    "delayProbability": 30,
+    "closureProbability": 25,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-16",
+    "school": "Homer Center",
+    "delayProbability": 34,
+    "closureProbability": 41,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-16",
+    "school": "Indiana",
+    "delayProbability": 34,
+    "closureProbability": 41,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-16",
+    "school": "Marion Center",
+    "delayProbability": 34,
+    "closureProbability": 41,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-16",
+    "school": "Penns Manor",
+    "delayProbability": 34,
+    "closureProbability": 41,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-16",
+    "school": "Purchase Line",
+    "delayProbability": 34,
+    "closureProbability": 41,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-16",
+    "school": "United",
+    "delayProbability": 34,
+    "closureProbability": 41,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-17",
+    "school": "Indiana",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-17",
+    "school": "Purchase Line",
+    "delayProbability": 36,
+    "closureProbability": 44,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-17",
+    "school": "United",
+    "delayProbability": 36,
+    "closureProbability": 44,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-19",
+    "school": "Homer Center",
+    "delayProbability": 33,
+    "closureProbability": 27,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-19",
+    "school": "Indiana",
+    "delayProbability": 33,
+    "closureProbability": 27,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-19",
+    "school": "Marion Center",
+    "delayProbability": 33,
+    "closureProbability": 27,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-19",
+    "school": "Penns Manor",
+    "delayProbability": 33,
+    "closureProbability": 27,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-19",
+    "school": "Purchase Line",
+    "delayProbability": 33,
+    "closureProbability": 27,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-01-19",
+    "school": "United",
+    "delayProbability": 33,
+    "closureProbability": 27,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-02-13",
+    "school": "Homer Center",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-02-13",
+    "school": "Penns Manor",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-02-13",
+    "school": "United",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-02-16",
+    "school": "Marion Center",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2024-02-20",
+    "school": "Marion Center",
+    "delayProbability": 30,
+    "closureProbability": 25,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-06",
+    "school": "Homer Center",
+    "delayProbability": 30,
+    "closureProbability": 25,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-06",
+    "school": "Indiana",
+    "delayProbability": 33,
+    "closureProbability": 62,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-06",
+    "school": "Penns Manor",
+    "delayProbability": 30,
+    "closureProbability": 25,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-06",
+    "school": "Purchase Line",
+    "delayProbability": 30,
+    "closureProbability": 25,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-06",
+    "school": "United",
+    "delayProbability": 30,
+    "closureProbability": 25,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-07",
+    "school": "Purchase Line",
+    "delayProbability": 30,
+    "closureProbability": 25,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-16",
+    "school": "Penns Manor",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-16",
+    "school": "Purchase Line",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-16",
+    "school": "United",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-17",
+    "school": "Indiana",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-17",
+    "school": "Penns Manor",
+    "delayProbability": 26,
+    "closureProbability": 14,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-17",
+    "school": "Purchase Line",
+    "delayProbability": 26,
+    "closureProbability": 14,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-17",
+    "school": "United",
+    "delayProbability": 26,
+    "closureProbability": 14,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-18",
+    "school": "Indiana",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-21",
+    "school": "Homer Center",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-21",
+    "school": "Indiana",
+    "delayProbability": 33,
+    "closureProbability": 62,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-21",
+    "school": "Marion Center",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-21",
+    "school": "Penns Manor",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-21",
+    "school": "Purchase Line",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-21",
+    "school": "United",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-01-22",
+    "school": "Indiana",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-02-06",
+    "school": "Indiana",
+    "delayProbability": 30,
+    "closureProbability": 25,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-02-18",
+    "school": "Indiana",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-12-02",
+    "school": "Homer Center",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-12-02",
+    "school": "Indiana",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-12-02",
+    "school": "Marion Center",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-12-02",
+    "school": "Penns Manor",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-12-02",
+    "school": "Purchase Line",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-12-02",
+    "school": "United",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-12-15",
+    "school": "Marion Center",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2025-12-15",
+    "school": "Purchase Line",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-06",
+    "school": "Marion Center",
+    "delayProbability": 34,
+    "closureProbability": 41,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-20",
+    "school": "Indiana",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-20",
+    "school": "United",
+    "delayProbability": 30,
+    "closureProbability": 25,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-21",
+    "school": "United",
+    "delayProbability": 33,
+    "closureProbability": 18,
+    "predictedDisruption": true,
+    "actualStatus": "early dismissal",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-22",
+    "school": "United",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-26",
+    "school": "Homer Center",
+    "delayProbability": 33,
+    "closureProbability": 62,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-26",
+    "school": "Indiana",
+    "delayProbability": 33,
+    "closureProbability": 62,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-26",
+    "school": "Marion Center",
+    "delayProbability": 33,
+    "closureProbability": 62,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-26",
+    "school": "Penns Manor",
+    "delayProbability": 33,
+    "closureProbability": 62,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-26",
+    "school": "Purchase Line",
+    "delayProbability": 33,
+    "closureProbability": 62,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-26",
+    "school": "United",
+    "delayProbability": 33,
+    "closureProbability": 62,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-27",
+    "school": "Homer Center",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-27",
+    "school": "Indiana",
+    "delayProbability": 32,
+    "closureProbability": 39,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-27",
+    "school": "Marion Center",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-27",
+    "school": "Penns Manor",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-27",
+    "school": "Purchase Line",
+    "delayProbability": 36,
+    "closureProbability": 44,
+    "predictedDisruption": true,
+    "actualStatus": "flexible instruction day",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-27",
+    "school": "United",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-28",
+    "school": "Homer Center",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-28",
+    "school": "Indiana",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-28",
+    "school": "Marion Center",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-28",
+    "school": "Penns Manor",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-28",
+    "school": "Purchase Line",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-28",
+    "school": "United",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-29",
+    "school": "Homer Center",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-29",
+    "school": "Indiana",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-29",
+    "school": "Marion Center",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-29",
+    "school": "Penns Manor",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "flexible instruction day",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-29",
+    "school": "Purchase Line",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "flexible instruction day",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-30",
+    "school": "Homer Center",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-30",
+    "school": "Indiana",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-30",
+    "school": "Marion Center",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "closed",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-30",
+    "school": "Penns Manor",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "delay",
+    "correct": true,
+    "source": "backtest"
+  },
+  {
+    "date": "2026-01-30",
+    "school": "Purchase Line",
+    "delayProbability": 29,
+    "closureProbability": 16,
+    "predictedDisruption": true,
+    "actualStatus": "flexible instruction day",
+    "correct": true,
+    "source": "backtest"
+  }
+]
