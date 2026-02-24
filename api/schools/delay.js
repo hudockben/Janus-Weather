@@ -1,5 +1,6 @@
 const { getCurrentConditions, getForecast, getHourlyForecast, getAlerts } = require('../_lib/noaa');
-const { calculateDelayProbability, getSchoolStatuses, getSchoolHistoricalPrediction, INDIANA_COUNTY_SCHOOLS, SCHOOL_CODE_TO_HISTORICAL_NAME } = require('../_lib/schoolDelay');
+const { calculateDelayProbability, getHistoricalPrediction, getSchoolStatuses, getSchoolHistoricalPrediction, INDIANA_COUNTY_SCHOOLS, SCHOOL_CODE_TO_HISTORICAL_NAME } = require('../_lib/schoolDelay');
+const { getPredictionAccuracy } = require('../_lib/weatherLogger');
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -62,12 +63,25 @@ module.exports = async (req, res) => {
       let closureProbability = prediction.closureProbability;
 
       if (schoolPrediction && schoolPrediction.matchCount >= 2) {
-        delayProbability = Math.round(
+        delayProbability = Math.max(0, Math.round(
           (prediction.delayProbability * 0.6) + (schoolPrediction.delayRate * 0.4)
-        );
-        closureProbability = Math.round(
+        ));
+        closureProbability = Math.max(0, Math.round(
           (prediction.closureProbability * 0.6) + (schoolPrediction.closureRate * 0.4)
-        );
+        ));
+      }
+
+      // Calculate combined probability and determine risk tier
+      const combinedProbability = Math.max(delayProbability, closureProbability);
+      let riskTier;
+      if (combinedProbability >= 70) {
+        riskTier = 'high';
+      } else if (combinedProbability >= 40) {
+        riskTier = 'moderate';
+      } else if (combinedProbability >= 15) {
+        riskTier = 'low';
+      } else {
+        riskTier = 'minimal';
       }
 
       return {
@@ -77,13 +91,18 @@ module.exports = async (req, res) => {
         lastChecked: schoolStatuses[school.code]?.lastChecked || null,
         delayProbability,
         closureProbability,
+        riskTier,
         historicalMatches: schoolPrediction?.matchCount || 0
       };
     });
 
+    // Get prediction accuracy stats
+    const accuracy = getPredictionAccuracy();
+
     res.json({
       location: 'Indiana County, PA',
       timestamp: new Date().toISOString(),
+      predictionAccuracy: accuracy,
       weather: {
         current: currentConditions ? {
           temperature: currentConditions.temperature?.fahrenheit,

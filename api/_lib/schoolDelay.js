@@ -206,6 +206,11 @@ function categorizeEvent(snow, type) {
 function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) {
   if (!historicalData || historicalData.length === 0) return null;
 
+  // Skip matching for mild/non-winter conditions - our dataset is winter events
+  // and matching against it on mild days produces misleading results
+  const type = (weatherType || '').toLowerCase();
+  if (snowfall === 0 && !type.includes('snow') && !type.includes('ice') && !type.includes('frigid') && !type.includes('cold')) return null;
+
   const currentCategory = categorizeEvent(snowfall, weatherType);
 
   // Score each historical record by similarity to current conditions
@@ -218,6 +223,14 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
     // A day with 0" snow should never match a day with 6"+ snow
     const snowDiff = Math.abs(record.snowfall - snowfall);
     if (snowDiff > 5) {
+      return { ...record, similarity: 0, disqualified: true };
+    }
+
+    // DISQUALIFY: If feels-like difference is too large (>20°F), skip this record
+    // Wind chill is a primary factor in school decisions - a day that feels like
+    // 10°F is fundamentally different from one that feels like -17°F
+    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
+    if (feelsDiff > 20) {
       return { ...record, similarity: 0, disqualified: true };
     }
 
@@ -241,11 +254,11 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
     else if (tempDiff <= 10) similarity += 2;
     else if (tempDiff <= 15) similarity += 1;
 
-    // Feels-like similarity
-    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
-    if (feelsDiff <= 5) similarity += 3;
-    else if (feelsDiff <= 10) similarity += 2;
-    else if (feelsDiff <= 15) similarity += 1;
+    // Feels-like similarity - higher weight since wind chill drives school decisions
+    if (feelsDiff <= 5) similarity += 4;
+    else if (feelsDiff <= 10) similarity += 3;
+    else if (feelsDiff <= 15) similarity += 2;
+    else similarity += 1;
 
     // Snowfall similarity - stricter scoring
     if (snowDiff <= 0.5) similarity += 4;
@@ -288,6 +301,7 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
     closureRate,
     delayRate,
     topMatches: matches.slice(0, 3).map(m => ({
+      school: m.school,
       date: m.date,
       status: m.status,
       temperature: m.temperature,
@@ -301,6 +315,10 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
 // Get historical prediction for a specific school
 function getSchoolHistoricalPrediction(schoolName, temperature, feelsLike, snowfall, weatherType) {
   if (!historicalData || historicalData.length === 0) return null;
+
+  // Skip matching for mild/non-winter conditions
+  const type = (weatherType || '').toLowerCase();
+  if (snowfall === 0 && !type.includes('snow') && !type.includes('ice') && !type.includes('frigid') && !type.includes('cold')) return null;
 
   // Filter historical data for this specific school
   const schoolData = historicalData.filter(r => r.school === schoolName);
@@ -317,6 +335,12 @@ function getSchoolHistoricalPrediction(schoolName, temperature, feelsLike, snowf
     // DISQUALIFY: If snowfall difference is too large (>5 inches), skip this record
     const snowDiff = Math.abs(record.snowfall - snowfall);
     if (snowDiff > 5) {
+      return { ...record, similarity: 0, disqualified: true };
+    }
+
+    // DISQUALIFY: If feels-like difference is too large (>20°F), skip this record
+    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
+    if (feelsDiff > 20) {
       return { ...record, similarity: 0, disqualified: true };
     }
 
@@ -338,11 +362,11 @@ function getSchoolHistoricalPrediction(schoolName, temperature, feelsLike, snowf
     else if (tempDiff <= 10) similarity += 2;
     else if (tempDiff <= 15) similarity += 1;
 
-    // Feels-like similarity
-    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
-    if (feelsDiff <= 5) similarity += 3;
-    else if (feelsDiff <= 10) similarity += 2;
-    else if (feelsDiff <= 15) similarity += 1;
+    // Feels-like similarity - higher weight since wind chill drives school decisions
+    if (feelsDiff <= 5) similarity += 4;
+    else if (feelsDiff <= 10) similarity += 3;
+    else if (feelsDiff <= 15) similarity += 2;
+    else similarity += 1;
 
     // Snowfall similarity
     if (snowDiff <= 0.5) similarity += 4;
@@ -575,33 +599,49 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     // Look at tonight and tomorrow morning periods
     const relevantPeriods = forecast.periods.slice(0, 4);
 
+    // Track what precipitation factors have been added to avoid redundancies
+    // e.g. "Light snow forecast (2 inches)" and "Snow in forecast" shouldn't both appear
+    let snowFactorAdded = false;
+    let iceFactorAdded = false;
+    let bestSnowAmount = 0;
+
+    // First pass: find the highest snow amount across all periods
+    relevantPeriods.forEach(period => {
+      const desc = (period.detailedForecast || period.shortForecast || '').toLowerCase();
+      const snowMatch = desc.match(/(\d+)\s*(?:to\s*(\d+))?\s*inch/);
+      if (snowMatch) {
+        const amount = snowMatch[2] ? parseInt(snowMatch[2]) : parseInt(snowMatch[1]);
+        if (amount > bestSnowAmount) bestSnowAmount = amount;
+      }
+    });
+
     relevantPeriods.forEach(period => {
       const desc = (period.detailedForecast || period.shortForecast || '').toLowerCase();
 
-      // Check for snow amounts
-      const snowMatch = desc.match(/(\d+)\s*(?:to\s*(\d+))?\s*inch/);
-      if (snowMatch) {
-        const snowAmount = snowMatch[2] ? parseInt(snowMatch[2]) : parseInt(snowMatch[1]);
-        if (snowAmount >= THRESHOLDS.heavySnow) {
+      // Check for snow amounts — only add the best (highest) snow amount factor once
+      if (!snowFactorAdded && bestSnowAmount > 0) {
+        if (bestSnowAmount >= THRESHOLDS.heavySnow) {
           probability += 45;
-          factors.push({ factor: `Heavy snow forecast (${snowAmount}+ inches)`, impact: +45 });
-        } else if (snowAmount >= THRESHOLDS.moderateSnow) {
+          factors.push({ factor: `Heavy snow forecast (${bestSnowAmount}+ inches)`, impact: +45 });
+        } else if (bestSnowAmount >= THRESHOLDS.moderateSnow) {
           probability += 30;
-          factors.push({ factor: `Moderate snow forecast (${snowAmount} inches)`, impact: +30 });
-        } else if (snowAmount >= THRESHOLDS.lightSnow) {
+          factors.push({ factor: `Moderate snow forecast (${bestSnowAmount} inches)`, impact: +30 });
+        } else if (bestSnowAmount >= THRESHOLDS.lightSnow) {
           probability += 15;
-          factors.push({ factor: `Light snow forecast (${snowAmount} inches)`, impact: +15 });
+          factors.push({ factor: `Light snow forecast (${bestSnowAmount} inches)`, impact: +15 });
         }
+        snowFactorAdded = true;
       }
 
-      // Check for ice/freezing rain
-      if (desc.includes('ice') || desc.includes('freezing rain') || desc.includes('sleet')) {
+      // Check for ice/freezing rain — only add once
+      if (!iceFactorAdded && (desc.includes('ice') || desc.includes('freezing rain') || desc.includes('sleet'))) {
         probability += 35;
         factors.push({ factor: 'Ice/freezing rain in forecast', impact: +35 });
+        iceFactorAdded = true;
       }
 
-      // Check for general snow mention without amounts
-      if (!snowMatch && (desc.includes('snow') || desc.includes('flurries'))) {
+      // Check for general snow mention without amounts — only if no specific snow factor was added
+      if (!snowFactorAdded && (desc.includes('snow') || desc.includes('flurries'))) {
         if (desc.includes('heavy')) {
           probability += 25;
           factors.push({ factor: 'Heavy snow mentioned', impact: +25 });
@@ -612,6 +652,7 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
           probability += 15;
           factors.push({ factor: 'Snow in forecast', impact: +15 });
         }
+        snowFactorAdded = true;
       }
     });
   }
@@ -701,8 +742,8 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     }
   }
 
-  // Cap probability at 95% (never 100% certain)
-  probability = Math.min(probability, 95);
+  // Clamp probability to valid range [0, 95]
+  probability = Math.max(0, Math.min(probability, 95));
 
   // Calculate separate delay and closure probabilities based on historical patterns
   let delayProbability, closureProbability;
@@ -710,8 +751,8 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     // Split the probability based on historical closure vs delay rates
     const closureRatio = historicalMatch.closureRate / historicalMatch.disruptionRate;
     const delayRatio = historicalMatch.delayRate / historicalMatch.disruptionRate;
-    closureProbability = Math.round(probability * closureRatio);
-    delayProbability = Math.round(probability * delayRatio);
+    closureProbability = Math.max(0, Math.round(probability * closureRatio));
+    delayProbability = Math.max(0, Math.round(probability * delayRatio));
   } else {
     // No historical data - use heuristics based on severity
     // Higher probabilities lean toward closure, lower toward delay
@@ -766,7 +807,7 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     factors: uniqueFactors,
     historicalMatch,
     schools: INDIANA_COUNTY_SCHOOLS,
-    disclaimer: 'This is an estimate based on weather conditions and historical patterns. Always check official school district announcements for actual delay/closure information.'
+    disclaimer: 'This is an estimate based on weather conditions and historical patterns. Weather data refreshes every 10 minutes. Always check official school district announcements for actual delay/closure information.'
   };
 }
 
@@ -782,6 +823,7 @@ const SCHOOL_CODE_TO_HISTORICAL_NAME = {
 
 module.exports = {
   calculateDelayProbability,
+  getHistoricalPrediction,
   getSchoolStatuses,
   getSchoolHistoricalPrediction,
   INDIANA_COUNTY_SCHOOLS,

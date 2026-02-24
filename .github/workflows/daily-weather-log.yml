@@ -53,7 +53,7 @@ jobs:
       - name: Check for changes
         id: check_changes
         run: |
-          if git diff --quiet api/_lib/historicalData.json; then
+          if git diff --quiet api/_lib/historicalData.json api/_lib/predictionLog.json; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -64,7 +64,7 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add api/_lib/historicalData.json
+          git add api/_lib/historicalData.json api/_lib/predictionLog.json
           git commit -m "Auto-log weather data for $(date +%Y-%m-%d)
 
           Automated daily weather and school status logging.

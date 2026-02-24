@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const noaa = require('./services/noaa');
 const { logWeatherData, getLoggingPreview } = require('../api/_lib/weatherLogger');
+const { generateWeeklyForecast, saveWeeklyForecast, loadWeeklyForecast } = require('../api/_lib/weeklyForecast');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,6 +63,35 @@ app.get('/api/alerts', async (req, res) => {
     res.json(alerts);
   } catch (error) {
     console.error('Error fetching alerts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get weekly forecast with school predictions (Mon-Fri)
+app.get('/api/weather/weekly', async (req, res) => {
+  try {
+    const refresh = req.query.refresh === 'true';
+    let data;
+
+    if (!refresh) {
+      data = loadWeeklyForecast();
+      if (data && data.generatedAt) {
+        const age = Date.now() - new Date(data.generatedAt).getTime();
+        const TWO_HOURS = 2 * 60 * 60 * 1000;
+        if (age < TWO_HOURS) {
+          return res.json(data);
+        }
+      }
+    }
+
+    data = await saveWeeklyForecast();
+    res.json(data);
+  } catch (error) {
+    console.error('Error generating weekly forecast:', error);
+    const cached = loadWeeklyForecast();
+    if (cached && cached.generatedAt) {
+      return res.json({ ...cached, _stale: true, _error: 'Using cached data due to fetch error' });
+    }
     res.status(500).json({ error: error.message });
   }
 });

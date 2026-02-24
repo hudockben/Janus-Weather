@@ -23,7 +23,8 @@
     </section>
 
     <section id="school-delay-section" class="school-delay">
-      <h2>School Delay Forecast</h2>
+      <h2>School Prediction Forecast</h2>
+      <p class="section-subtitle">Historical data updates weekdays at 7:30 AM EST</p>
       <div id="school-delay-container" class="loading">
         <p>Loading school delay prediction...</p>
       </div>
@@ -44,8 +45,11 @@
     </section>
 
     <section class="forecast">
-      <h2>7-Day Forecast</h2>
-      <div id="forecast-container" class="loading">
+      <h2 class="collapsible-header section-toggle collapsed" data-target="forecast-container">
+        <span class="caret forecast-caret"></span>
+        7-Day Forecast
+      </h2>
+      <div id="forecast-container" class="collapsible-content collapsed loading">
         <p>Loading forecast...</p>
       </div>
     </section>

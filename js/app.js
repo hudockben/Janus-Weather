@@ -1,6 +1,7 @@
 // Janus Forecast Model - Frontend Application
 
 const API_BASE = '/api';
+let isFirstLoad = true;
 
 // DOM Elements
 const alertsSection = document.getElementById('alerts-section');
@@ -19,8 +20,76 @@ async function init() {
   // Alerts collapsible toggle
   alertsHeader.addEventListener('click', toggleAlerts);
 
+  // Forecast collapsible toggle
+  const forecastToggle = document.querySelector('.forecast .section-toggle');
+  if (forecastToggle) {
+    forecastToggle.addEventListener('click', () => {
+      forecastToggle.classList.toggle('collapsed');
+      forecastContainer.classList.toggle('collapsed');
+    });
+  }
+
   // Auto-refresh every 10 minutes
   setInterval(refreshAllData, 600000);
+}
+
+// Play full-screen intro animation based on weather
+function playIntroAnimation(weatherType) {
+  // Create fullscreen overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'intro-weather-overlay';
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(overlay);
+
+  // Spawn particles based on weather
+  if (weatherType === 'snow') {
+    for (let i = 0; i < 50; i++) {
+      const flake = document.createElement('div');
+      flake.className = 'intro-snowflake';
+      flake.style.left = Math.random() * 100 + 'vw';
+      flake.style.animationDelay = Math.random() * 2 + 's';
+      flake.style.animationDuration = (2 + Math.random() * 2) + 's';
+      flake.style.fontSize = (12 + Math.random() * 16) + 'px';
+      flake.textContent = '❄';
+      overlay.appendChild(flake);
+    }
+  } else if (weatherType === 'rain') {
+    for (let i = 0; i < 80; i++) {
+      const drop = document.createElement('div');
+      drop.className = 'intro-raindrop';
+      drop.style.left = Math.random() * 100 + 'vw';
+      drop.style.animationDelay = Math.random() * 1.5 + 's';
+      drop.style.animationDuration = (0.4 + Math.random() * 0.3) + 's';
+      overlay.appendChild(drop);
+    }
+  } else if (weatherType === 'clear') {
+    const sunburst = document.createElement('div');
+    sunburst.className = 'intro-sunburst';
+    overlay.appendChild(sunburst);
+  } else if (weatherType === 'cloudy') {
+    for (let i = 0; i < 5; i++) {
+      const cloud = document.createElement('div');
+      cloud.className = 'intro-cloud';
+      cloud.style.top = (10 + Math.random() * 60) + 'vh';
+      cloud.style.animationDelay = i * 0.3 + 's';
+      cloud.style.transform = `scale(${0.6 + Math.random() * 0.8})`;
+      overlay.appendChild(cloud);
+    }
+  } else if (weatherType === 'fog') {
+    for (let i = 0; i < 4; i++) {
+      const fog = document.createElement('div');
+      fog.className = 'intro-fog';
+      fog.style.top = (i * 25) + 'vh';
+      fog.style.animationDelay = i * 0.2 + 's';
+      overlay.appendChild(fog);
+    }
+  }
+
+  // Fade out and remove after animation
+  setTimeout(() => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => overlay.remove(), 800);
+  }, 2500);
 }
 
 // Toggle alerts section expanded/collapsed
@@ -66,9 +135,11 @@ async function loadCurrentConditions(location) {
 function renderCurrentConditions(data) {
   const windDir = getWindDirection(data.windDirection);
   const updated = new Date(data.timestamp).toLocaleString();
+  const weatherType = getWeatherType(data.description);
 
   currentContainer.innerHTML = `
-    <div class="current-container">
+    <div class="current-container" data-weather="${weatherType}">
+      <div class="weather-effects" aria-hidden="true"></div>
       <div class="current-main">
         ${data.icon ? `<img src="${data.icon}" alt="${data.description}" class="current-icon">` : ''}
         <div>
@@ -102,6 +173,97 @@ function renderCurrentConditions(data) {
       </div>
     </div>
   `;
+
+  // Spawn weather particles in the container
+  spawnWeatherEffects(weatherType);
+
+  // Play intro animation on first load
+  if (isFirstLoad) {
+    isFirstLoad = false;
+    playIntroAnimation(weatherType);
+  }
+}
+
+// Determine weather type from description
+function getWeatherType(description) {
+  if (!description) return 'clear';
+  const desc = description.toLowerCase();
+
+  if (desc.includes('snow') || desc.includes('flurr')) return 'snow';
+  if (desc.includes('rain') || desc.includes('drizzle') || desc.includes('shower')) return 'rain';
+  if (desc.includes('fog') || desc.includes('mist') || desc.includes('haze')) return 'fog';
+  if (desc.includes('cloud') || desc.includes('overcast')) return 'cloudy';
+  if (desc.includes('sun') || desc.includes('clear')) return 'clear';
+  return 'clear';
+}
+
+// Spawn weather effect particles
+function spawnWeatherEffects(weatherType) {
+  const container = document.querySelector('.weather-effects');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  if (weatherType === 'snow') {
+    // Spawn 15 snowflakes
+    for (let i = 0; i < 15; i++) {
+      const flake = document.createElement('div');
+      flake.className = 'snowflake';
+      flake.style.left = Math.random() * 100 + '%';
+      flake.style.animationDelay = Math.random() * 5 + 's';
+      flake.style.animationDuration = (4 + Math.random() * 4) + 's';
+      flake.style.opacity = 0.3 + Math.random() * 0.4;
+      flake.style.fontSize = (8 + Math.random() * 8) + 'px';
+      flake.textContent = '❄';
+      container.appendChild(flake);
+    }
+  } else if (weatherType === 'rain') {
+    // Spawn 20 rain drops
+    for (let i = 0; i < 20; i++) {
+      const drop = document.createElement('div');
+      drop.className = 'raindrop';
+      drop.style.left = Math.random() * 100 + '%';
+      drop.style.animationDelay = Math.random() * 2 + 's';
+      drop.style.animationDuration = (0.5 + Math.random() * 0.5) + 's';
+      drop.style.opacity = 0.2 + Math.random() * 0.3;
+      container.appendChild(drop);
+    }
+  } else if (weatherType === 'fog') {
+    // Add fog layers
+    for (let i = 0; i < 3; i++) {
+      const fog = document.createElement('div');
+      fog.className = 'fog-layer';
+      fog.style.animationDelay = i * 2 + 's';
+      fog.style.top = (20 + i * 25) + '%';
+      container.appendChild(fog);
+    }
+  } else if (weatherType === 'clear') {
+    // Add sun glow and rays
+    const sunGlow = document.createElement('div');
+    sunGlow.className = 'sun-glow';
+    container.appendChild(sunGlow);
+
+    // Add rotating rays
+    const sunRays = document.createElement('div');
+    sunRays.className = 'sun-rays';
+    for (let i = 0; i < 8; i++) {
+      const ray = document.createElement('div');
+      ray.className = 'sun-ray';
+      ray.style.transform = `rotate(${i * 45}deg)`;
+      sunRays.appendChild(ray);
+    }
+    container.appendChild(sunRays);
+  } else if (weatherType === 'cloudy') {
+    // Add drifting clouds
+    for (let i = 0; i < 3; i++) {
+      const cloud = document.createElement('div');
+      cloud.className = 'cloud';
+      cloud.style.top = (15 + i * 30) + '%';
+      cloud.style.animationDelay = i * 3 + 's';
+      cloud.style.opacity = 0.08 + Math.random() * 0.06;
+      container.appendChild(cloud);
+    }
+  }
 }
 
 // Load hourly forecast
@@ -275,12 +437,12 @@ function renderSchoolDelay(data) {
     </div>
 
     <div class="delay-factors">
-      <h4 class="collapsible-header section-toggle" data-target="factors-content">
+      <h4 class="collapsible-header section-toggle collapsed" data-target="factors-content">
         <span class="caret factors-caret"></span>
         Contributing Factors
         <span class="factor-count">${data.factors?.length || 0}</span>
       </h4>
-      <div id="factors-content" class="collapsible-content section-content">
+      <div id="factors-content" class="collapsible-content section-content collapsed">
         <p class="factors-explanation">Each factor adds to the overall delay/closure probability</p>
         ${data.factors && data.factors.length > 0 ? `
           <ul>
@@ -297,16 +459,17 @@ function renderSchoolDelay(data) {
 
     ${data.historicalMatch ? `
       <div class="historical-match">
-        <h4 class="collapsible-header section-toggle" data-target="historical-content">
+        <h4 class="collapsible-header section-toggle collapsed" data-target="historical-content">
           <span class="caret historical-caret"></span>
-          Historical Pattern
+          Today's Historical Pattern
           <span class="match-count">${data.historicalMatch.matchCount} matches</span>
         </h4>
-        <div id="historical-content" class="collapsible-content section-content">
-          <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
+        <div id="historical-content" class="collapsible-content section-content collapsed">
+          <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days with today's current conditions: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
           <div class="past-matches">
             ${data.historicalMatch.topMatches.map(m => `
               <div class="past-match-item">
+                <span class="past-school">${m.school}</span>
                 <span class="past-date">${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                 <span class="past-type">${m.type}</span>
                 <span class="past-conditions">${m.temperature}°F / Feels ${m.feelsLike}°F${m.snowfall > 0 ? ` / ${m.snowfall}" snow` : ''}</span>
@@ -318,24 +481,50 @@ function renderSchoolDelay(data) {
       </div>
     ` : ''}
 
+
     <div class="delay-schools">
-      <div class="schools-date">Current Status — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
       ${data.schools.map(s => {
         const statusClass = getStatusClass(s.currentStatus);
         const statusLabel = getStatusLabel(s.currentStatus);
+        const riskTierLabel = getRiskTierLabel(s.riskTier);
+        const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
         return `
-          <div class="school-status-item">
-            <div class="school-info">
-              <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
+          <div class="school-card">
+            <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
+            <div class="school-row today-row">
+              <span class="row-label">TODAY ${todayDate}:</span>
               <span class="school-current-status ${statusClass}">${statusLabel}</span>
             </div>
-            <div class="school-probabilities">
-              <span class="school-prob delay" title="Delay probability for ${s.shortName}">${s.delayProbability}% delay</span>
-              <span class="school-prob closure" title="Closure probability for ${s.shortName}">${s.closureProbability}% closure</span>
+            <div class="school-row tomorrow-row">
+              <span class="row-label">TOMORROW:</span>
+              <span class="school-prob delay">${s.delayProbability}% delay</span>
+              <span class="school-prob closure">${s.closureProbability}% closure</span>
+              <span class="school-risk-tier ${s.riskTier}">${riskTierLabel}</span>
             </div>
           </div>
         `;
       }).join('')}
+    </div>
+
+    <div class="prediction-accuracy">
+      ${data.predictionAccuracy && data.predictionAccuracy.status === 'active' ? `
+        <div class="accuracy-header">
+          <span class="accuracy-label">Self-Audit:</span>
+          <span class="accuracy-value">${data.predictionAccuracy.accuracy}%</span>
+        </div>
+        <div class="accuracy-detail">
+          ${data.predictionAccuracy.correct}/${data.predictionAccuracy.total} recent predictions correct${data.predictionAccuracy.streak > 1 ? ` &middot; ${data.predictionAccuracy.streak} correct in a row` : ''}${data.predictionAccuracy.liveCount > 0 ? '' : ' &middot; Based on historical backtest'}
+        </div>
+        <div class="accuracy-bar-container">
+          <div class="accuracy-bar" style="width: ${data.predictionAccuracy.accuracy}%"></div>
+        </div>
+      ` : `
+        <div class="accuracy-header">
+          <span class="accuracy-label">Self-Audit:</span>
+          <span class="accuracy-collecting">Collecting prediction data&hellip;</span>
+        </div>
+        <div class="accuracy-detail">Accuracy will appear after predictions are verified against actual outcomes.</div>
+      `}
     </div>
 
     <p class="delay-disclaimer">${data.disclaimer}</p>
@@ -347,7 +536,7 @@ function renderSchoolDelay(data) {
 
 // Attach toggle handlers for collapsible sections
 function attachSectionToggles() {
-  const toggles = document.querySelectorAll('.section-toggle');
+  const toggles = schoolDelayContainer.querySelectorAll('.section-toggle');
   toggles.forEach(toggle => {
     toggle.addEventListener('click', () => {
       const targetId = toggle.getAttribute('data-target');
@@ -395,6 +584,17 @@ function getStatusLabel(status) {
     case 'flexible instruction':
     case 'flexible instruction day': return 'Flexible Instruction';
     default: return 'Checking...';
+  }
+}
+
+// Helper: Get display label for risk tier
+function getRiskTierLabel(tier) {
+  switch (tier) {
+    case 'high': return 'High Risk';
+    case 'moderate': return 'Moderate';
+    case 'low': return 'Low Risk';
+    case 'minimal': return 'Minimal';
+    default: return '';
   }
 }
 

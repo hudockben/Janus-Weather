@@ -11,6 +11,175 @@ body {
   color: #E5E7EB;
 }
 
+/* Full-screen intro weather animation */
+.intro-weather-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+  transition: opacity 0.8s ease-out;
+}
+
+.intro-weather-overlay.fade-out {
+  opacity: 0;
+}
+
+/* Intro snowflakes */
+.intro-snowflake {
+  position: absolute;
+  top: -50px;
+  color: #fff;
+  opacity: 0.8;
+  animation: intro-snow-fall linear forwards;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+}
+
+@keyframes intro-snow-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(110vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* Intro rain */
+.intro-raindrop {
+  position: absolute;
+  top: -20px;
+  width: 2px;
+  height: 25px;
+  background: linear-gradient(to bottom, transparent, rgba(150, 200, 255, 0.8));
+  border-radius: 0 0 2px 2px;
+  animation: intro-rain-fall linear forwards;
+}
+
+@keyframes intro-rain-fall {
+  0% {
+    transform: translateY(0);
+    opacity: 0.8;
+  }
+  80% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(110vh);
+    opacity: 0;
+  }
+}
+
+/* Intro sunburst */
+.intro-sunburst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 300px;
+  height: 300px;
+  margin: -150px 0 0 -150px;
+  background: radial-gradient(circle, rgba(255, 220, 100, 0.4) 0%, rgba(255, 180, 50, 0.2) 30%, transparent 70%);
+  border-radius: 50%;
+  animation: intro-sunburst 2.5s ease-out forwards;
+}
+
+@keyframes intro-sunburst {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(1.5);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+
+/* Intro clouds */
+.intro-cloud {
+  position: absolute;
+  left: -200px;
+  width: 200px;
+  height: 80px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 40px;
+  filter: blur(15px);
+  animation: intro-cloud-drift 3s ease-out forwards;
+}
+
+.intro-cloud::before {
+  content: '';
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  background: inherit;
+  border-radius: 50%;
+  top: -40px;
+  left: 30px;
+}
+
+@keyframes intro-cloud-drift {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateX(calc(100vw + 400px));
+    opacity: 0;
+  }
+}
+
+/* Intro fog */
+.intro-fog {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 30vh;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 30%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.1) 70%,
+    transparent 100%
+  );
+  filter: blur(20px);
+  animation: intro-fog-sweep 2.5s ease-out forwards;
+}
+
+@keyframes intro-fog-sweep {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* Disable intro animations for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .intro-weather-overlay {
+    display: none;
+  }
+}
+
 header {
   text-align: center;
   padding: 2rem 1rem;
@@ -150,6 +319,10 @@ section h2 {
   border-top-color: #a78bfa;
 }
 
+.collapsible-header .caret.forecast-caret {
+  border-top-color: #fbbf24;
+}
+
 /* Count badges for collapsible sections */
 .collapsible-header .factor-count,
 .collapsible-header .match-count {
@@ -226,6 +399,14 @@ section h2 {
 
 .school-delay h2 {
   color: #7fcfc0;
+}
+
+.section-subtitle {
+  font-size: 0.85rem;
+  color: #B8C0C8;
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+  font-style: italic;
 }
 
 .delay-date {
@@ -352,7 +533,7 @@ section h2 {
 
 .delay-schools {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
   gap: 0.75rem;
   margin-bottom: 1rem;
 }
@@ -395,12 +576,18 @@ section h2 {
 
 .past-match-item {
   display: grid;
-  grid-template-columns: 100px 130px 1fr auto;
+  grid-template-columns: 95px 100px 110px 1fr auto;
   gap: 0.75rem;
   align-items: center;
   font-size: 0.85rem;
   padding: 0.5rem 0;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.past-school {
+  color: #7fcfc0;
+  font-weight: 600;
+  font-size: 0.8rem;
 }
 
 .past-date {
@@ -446,36 +633,6 @@ section h2 {
   }
 }
 
-.schools-date {
-  grid-column: 1 / -1;
-  font-size: 0.9rem;
-  color: #E5E7EB;
-  font-style: italic;
-  margin-bottom: 0.25rem;
-}
-
-.school-status-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.school-status-item .school-name {
-  color: #e2e8f0;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.2s;
-}
-
-.school-status-item .school-name:hover {
-  color: #5FB3A2;
-  text-decoration: underline;
-}
-
 .school-current-status {
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
@@ -515,24 +672,48 @@ section h2 {
   color: #E5E7EB;
 }
 
-/* Per-school probability display */
-.school-status-item {
+/* School card layout */
+.school-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.school-card .school-name {
+  color: #e2e8f0;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.school-card .school-name:hover {
+  color: #5FB3A2;
+  text-decoration: underline;
+}
+
+.school-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  min-width: 0;
 }
 
-.school-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex: 1;
-  min-width: 200px;
-}
-
-.school-probabilities {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
+.school-row .row-label {
+  font-size: 0.7rem;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  flex-shrink: 0;
 }
 
 .school-prob {
@@ -555,21 +736,121 @@ section h2 {
   border: 1px solid rgba(248, 113, 113, 0.3);
 }
 
+.school-risk-tier {
+  font-size: 0.65rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.school-risk-tier.high {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+}
+
+.school-risk-tier.moderate {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+
+.school-risk-tier.low {
+  background: rgba(163, 230, 53, 0.2);
+  color: #a3e635;
+  border: 1px solid rgba(163, 230, 53, 0.4);
+}
+
+.school-risk-tier.minimal {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.4);
+}
+
 @media (max-width: 480px) {
-  .school-status-item {
-    flex-direction: column;
-    align-items: flex-start;
+  .school-card {
+    padding: 0.6rem 0.75rem;
   }
 
-  .school-info {
-    width: 100%;
-    justify-content: space-between;
+  .school-card .school-name {
+    font-size: 0.9rem;
   }
 
-  .school-probabilities {
+  .school-row .row-label {
+    font-size: 0.6rem;
     width: 100%;
-    justify-content: flex-end;
   }
+
+  .school-prob {
+    font-size: 0.6rem;
+    padding: 0.15rem 0.4rem;
+  }
+
+  .school-risk-tier {
+    font-size: 0.55rem;
+    padding: 0.15rem 0.4rem;
+  }
+}
+
+.prediction-accuracy {
+  text-align: center;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+  color: #B8C0C8;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.prediction-accuracy .accuracy-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.prediction-accuracy .accuracy-label {
+  color: #8a9bae;
+  font-weight: 500;
+}
+
+.prediction-accuracy .accuracy-value {
+  color: #4CAF50;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.prediction-accuracy .accuracy-collecting {
+  color: #F0AD4E;
+  font-style: italic;
+}
+
+.prediction-accuracy .accuracy-detail {
+  font-size: 0.75rem;
+  color: #6b7a8d;
+  margin-bottom: 0.4rem;
+}
+
+.accuracy-bar-container {
+  width: 100%;
+  max-width: 200px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  margin: 0.4rem auto 0;
+  overflow: hidden;
+}
+
+.accuracy-bar {
+  height: 100%;
+  background: #4CAF50;
+  border-radius: 2px;
+  transition: width 0.5s ease;
 }
 
 .delay-disclaimer {
@@ -593,6 +874,197 @@ section h2 {
   border-radius: 16px;
   padding: 2rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Weather Effects */
+.weather-effects {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.current-container > *:not(.weather-effects) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Snowflakes */
+.snowflake {
+  position: absolute;
+  top: -20px;
+  color: #fff;
+  animation: snowfall linear infinite;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+@keyframes snowfall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  100% {
+    transform: translateY(calc(100% + 250px)) rotate(360deg);
+  }
+}
+
+/* Rain drops */
+.raindrop {
+  position: absolute;
+  top: -10px;
+  width: 2px;
+  height: 15px;
+  background: linear-gradient(to bottom, transparent, rgba(150, 200, 255, 0.6));
+  border-radius: 0 0 2px 2px;
+  animation: rainfall linear infinite;
+}
+
+@keyframes rainfall {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(300px);
+  }
+}
+
+/* Fog layers */
+.fog-layer {
+  position: absolute;
+  left: -50%;
+  width: 200%;
+  height: 40px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 20%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.08) 80%,
+    transparent 100%
+  );
+  animation: fogdrift 12s ease-in-out infinite;
+  filter: blur(8px);
+}
+
+@keyframes fogdrift {
+  0%, 100% {
+    transform: translateX(-10%);
+  }
+  50% {
+    transform: translateX(10%);
+  }
+}
+
+/* Sun glow and rays */
+.sun-glow {
+  position: absolute;
+  top: -30px;
+  right: -30px;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(255, 220, 100, 0.25) 0%, rgba(255, 180, 50, 0.1) 40%, transparent 70%);
+  border-radius: 50%;
+  animation: sunpulse 4s ease-in-out infinite;
+}
+
+.sun-rays {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 60px;
+  height: 60px;
+  animation: sunrotate 30s linear infinite;
+}
+
+.sun-ray {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 40px;
+  background: linear-gradient(to bottom, rgba(255, 220, 100, 0.3), transparent);
+  transform-origin: top center;
+  margin-left: -1px;
+}
+
+@keyframes sunpulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes sunrotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Clouds */
+.cloud {
+  position: absolute;
+  left: -20%;
+  width: 150px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 25px;
+  filter: blur(10px);
+  animation: clouddrift 20s ease-in-out infinite;
+}
+
+.cloud::before,
+.cloud::after {
+  content: '';
+  position: absolute;
+  background: inherit;
+  border-radius: 50%;
+}
+
+.cloud::before {
+  width: 60px;
+  height: 60px;
+  top: -25px;
+  left: 20px;
+}
+
+.cloud::after {
+  width: 45px;
+  height: 45px;
+  top: -15px;
+  right: 25px;
+}
+
+@keyframes clouddrift {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(140%);
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .snowflake,
+  .raindrop,
+  .fog-layer,
+  .sun-glow,
+  .sun-rays,
+  .cloud {
+    animation: none;
+    opacity: 0.3;
+  }
 }
 
 .current-main {
