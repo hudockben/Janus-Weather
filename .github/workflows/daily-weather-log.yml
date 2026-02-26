@@ -40,6 +40,7 @@ jobs:
 
       - name: Run weather logger
         id: logger
+        continue-on-error: true
         run: |
           ARGS=""
           if [[ "${{ github.event.inputs.force_log }}" == "true" ]]; then
