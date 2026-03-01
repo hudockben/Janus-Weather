@@ -320,8 +320,25 @@ async function logWeatherData(options = {}) {
         else if (dow === 0) tomorrow.setDate(tomorrow.getDate() + 1); // Sunday → Monday
         const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-        const prediction = calculateDelayProbability(currentConditions, forecast, null, alerts?.alerts || []);
-        const saved = saveTomorrowPredictions(predictionLog, prediction, currentConditions, forecast, schoolStatuses, tomorrowStr);
+        // Use only the forecast periods that cover the target date (and the night before).
+        // Without this, a Friday run predicting Monday would use slice(0,4) = Friday+Saturday
+        // periods, completely missing Sunday night and Monday morning weather.
+        let targetForecast = forecast;
+        if (forecast && forecast.periods) {
+          const firstIdx = forecast.periods.findIndex(
+            p => p.startTime && p.startTime.startsWith(tomorrowStr)
+          );
+          if (firstIdx > 1) {
+            // Target is further than the next period — slice to [night-before … target night]
+            const targetPeriods = forecast.periods.slice(Math.max(0, firstIdx - 1), firstIdx + 2);
+            if (targetPeriods.length > 0) {
+              targetForecast = { ...forecast, periods: targetPeriods };
+            }
+          }
+        }
+
+        const prediction = calculateDelayProbability(currentConditions, targetForecast, null, alerts?.alerts || []);
+        const saved = saveTomorrowPredictions(predictionLog, prediction, currentConditions, targetForecast, schoolStatuses, tomorrowStr);
 
         savePredictionLog(predictionLog);
         results.predictions = { resolved, savedForTomorrow: saved };
