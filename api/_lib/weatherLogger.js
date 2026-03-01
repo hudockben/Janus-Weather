@@ -312,9 +312,12 @@ async function logWeatherData(options = {}) {
         // Resolve yesterday's predictions with today's actual statuses
         const resolved = resolvePredictions(predictionLog, schoolStatuses, today);
 
-        // Save predictions for tomorrow
+        // Save predictions for the next school day (skip weekends)
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
+        const dow = tomorrow.getDay();
+        if (dow === 6) tomorrow.setDate(tomorrow.getDate() + 2); // Saturday → Monday
+        else if (dow === 0) tomorrow.setDate(tomorrow.getDate() + 1); // Sunday → Monday
         const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
         const prediction = calculateDelayProbability(currentConditions, forecast, null, alerts?.alerts || []);
