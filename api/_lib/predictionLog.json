@@ -1556,5 +1556,59 @@
     "predictedDisruption": false,
     "actualStatus": null,
     "correct": null
+  },
+  {
+    "date": "2026-03-17",
+    "school": "Indiana",
+    "delayProbability": 11,
+    "closureProbability": 4,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
+  },
+  {
+    "date": "2026-03-17",
+    "school": "Homer-Center",
+    "delayProbability": 11,
+    "closureProbability": 4,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
+  },
+  {
+    "date": "2026-03-17",
+    "school": "Marion Center",
+    "delayProbability": 11,
+    "closureProbability": 4,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
+  },
+  {
+    "date": "2026-03-17",
+    "school": "Penns Manor",
+    "delayProbability": 11,
+    "closureProbability": 4,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
+  },
+  {
+    "date": "2026-03-17",
+    "school": "Purchase Line",
+    "delayProbability": 11,
+    "closureProbability": 4,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
+  },
+  {
+    "date": "2026-03-17",
+    "school": "United",
+    "delayProbability": 11,
+    "closureProbability": 4,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
   }
 ]
