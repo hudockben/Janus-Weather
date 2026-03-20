@@ -1725,8 +1725,8 @@
     "delayProbability": 0,
     "closureProbability": 0,
     "predictedDisruption": false,
-    "actualStatus": null,
-    "correct": null
+    "actualStatus": "open",
+    "correct": true
   },
   {
     "date": "2026-03-20",
@@ -1734,8 +1734,8 @@
     "delayProbability": 0,
     "closureProbability": 0,
     "predictedDisruption": false,
-    "actualStatus": null,
-    "correct": null
+    "actualStatus": "open",
+    "correct": true
   },
   {
     "date": "2026-03-20",
@@ -1743,8 +1743,8 @@
     "delayProbability": 0,
     "closureProbability": 0,
     "predictedDisruption": false,
-    "actualStatus": null,
-    "correct": null
+    "actualStatus": "open",
+    "correct": true
   },
   {
     "date": "2026-03-20",
@@ -1752,8 +1752,8 @@
     "delayProbability": 0,
     "closureProbability": 0,
     "predictedDisruption": false,
-    "actualStatus": null,
-    "correct": null
+    "actualStatus": "open",
+    "correct": true
   },
   {
     "date": "2026-03-20",
@@ -1761,14 +1761,68 @@
     "delayProbability": 0,
     "closureProbability": 0,
     "predictedDisruption": false,
-    "actualStatus": null,
-    "correct": null
+    "actualStatus": "open",
+    "correct": true
   },
   {
     "date": "2026-03-20",
     "school": "United",
     "delayProbability": 0,
     "closureProbability": 0,
+    "predictedDisruption": false,
+    "actualStatus": "open",
+    "correct": true
+  },
+  {
+    "date": "2026-03-21",
+    "school": "Indiana",
+    "delayProbability": 32,
+    "closureProbability": 32,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
+  },
+  {
+    "date": "2026-03-21",
+    "school": "Homer-Center",
+    "delayProbability": 32,
+    "closureProbability": 32,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
+  },
+  {
+    "date": "2026-03-21",
+    "school": "Marion Center",
+    "delayProbability": 32,
+    "closureProbability": 32,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
+  },
+  {
+    "date": "2026-03-21",
+    "school": "Penns Manor",
+    "delayProbability": 32,
+    "closureProbability": 32,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
+  },
+  {
+    "date": "2026-03-21",
+    "school": "Purchase Line",
+    "delayProbability": 32,
+    "closureProbability": 32,
+    "predictedDisruption": false,
+    "actualStatus": null,
+    "correct": null
+  },
+  {
+    "date": "2026-03-21",
+    "school": "United",
+    "delayProbability": 32,
+    "closureProbability": 32,
     "predictedDisruption": false,
     "actualStatus": null,
     "correct": null
