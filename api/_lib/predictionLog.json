@@ -6693,11 +6693,65 @@
     "delayProbability": 0,
     "closureProbability": 0,
     "predictedDisruption": false,
+    "actualStatus": "open",
+    "correct": true
+  },
+  {
+    "date": "2026-07-29",
+    "school": "Homer-Center",
+    "delayProbability": 0,
+    "closureProbability": 0,
+    "predictedDisruption": false,
+    "actualStatus": "open",
+    "correct": true
+  },
+  {
+    "date": "2026-07-29",
+    "school": "Marion Center",
+    "delayProbability": 0,
+    "closureProbability": 0,
+    "predictedDisruption": false,
+    "actualStatus": "open",
+    "correct": true
+  },
+  {
+    "date": "2026-07-29",
+    "school": "Penns Manor",
+    "delayProbability": 0,
+    "closureProbability": 0,
+    "predictedDisruption": false,
+    "actualStatus": "open",
+    "correct": true
+  },
+  {
+    "date": "2026-07-29",
+    "school": "Purchase Line",
+    "delayProbability": 0,
+    "closureProbability": 0,
+    "predictedDisruption": false,
+    "actualStatus": "open",
+    "correct": true
+  },
+  {
+    "date": "2026-07-29",
+    "school": "United",
+    "delayProbability": 0,
+    "closureProbability": 0,
+    "predictedDisruption": false,
+    "actualStatus": "open",
+    "correct": true
+  },
+  {
+    "date": "2026-07-30",
+    "school": "Indiana",
+    "delayProbability": 0,
+    "closureProbability": 0,
+    "predictedDisruption": false,
     "actualStatus": null,
     "correct": null
   },
   {
-    "date": "2026-07-29",
+    "date": "2026-07-30",
     "school": "Homer-Center",
     "delayProbability": 0,
     "closureProbability": 0,
@@ -6706,7 +6760,7 @@
     "correct": null
   },
   {
-    "date": "2026-07-29",
+    "date": "2026-07-30",
     "school": "Marion Center",
     "delayProbability": 0,
     "closureProbability": 0,
@@ -6715,7 +6769,7 @@
     "correct": null
   },
   {
-    "date": "2026-07-29",
+    "date": "2026-07-30",
     "school": "Penns Manor",
     "delayProbability": 0,
     "closureProbability": 0,
@@ -6724,7 +6778,7 @@
     "correct": null
   },
   {
-    "date": "2026-07-29",
+    "date": "2026-07-30",
     "school": "Purchase Line",
     "delayProbability": 0,
     "closureProbability": 0,
@@ -6733,7 +6787,7 @@
     "correct": null
   },
   {
-    "date": "2026-07-29",
+    "date": "2026-07-30",
     "school": "United",
     "delayProbability": 0,
     "closureProbability": 0,
