@@ -2401,5 +2401,23 @@
     "snowfall": 0,
     "type": "unknown",
     "feelsLike": 73
+  },
+  {
+    "school": "Homer-Center",
+    "date": "2026-09-07",
+    "status": "closed",
+    "temperature": 75,
+    "snowfall": 0,
+    "type": "unknown",
+    "feelsLike": 75
+  },
+  {
+    "school": "United",
+    "date": "2026-09-07",
+    "status": "closed",
+    "temperature": 75,
+    "snowfall": 0,
+    "type": "unknown",
+    "feelsLike": 75
   }
 ]
