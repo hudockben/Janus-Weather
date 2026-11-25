@@ -11,6 +11,18 @@ const LOCATIONS = {
   marioncenter: { name: 'Marion Center', lat: 40.7687, lon: -79.0467 }
 };
 
+// NWS forecast zones that make up Indiana County (verified with /points lookups):
+//   PAZ077 "Indiana"                        - Indiana, Homer City, Marion Center, Clymer, Commodore
+//   PAZ078 "Higher Elevations of Indiana"   - the southeast ridges: Armagh, Heilwood
+// County-based products (e.g. Snow Squall Warnings) carry the county code instead.
+const INDIANA_COUNTY_ZONES = ['PAZ077', 'PAZ078'];
+const INDIANA_COUNTY_CODE = 'PAC063';
+// Neighbors shown in the alerts banner for regional awareness (Allegheny, Beaver).
+// These never feed the school prediction.
+const REGIONAL_ZONES = ['PAZ021', 'PAZ020'];
+
+const REQUEST_TIMEOUT_MS = 8000;
+
 async function fetchWithRetry(url, retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -18,7 +30,8 @@ async function fetchWithRetry(url, retries = 3) {
         headers: {
           'User-Agent': USER_AGENT,
           'Accept': 'application/geo+json'
-        }
+        },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
       });
 
       if (!response.ok) {
@@ -33,9 +46,90 @@ async function fetchWithRetry(url, retries = 3) {
   }
 }
 
+// Grid point metadata never changes for a coordinate, so look it up once per
+// process instead of once per forecast call.
+const gridPointCache = new Map();
+
 async function getGridPoint(lat, lon) {
-  const data = await fetchWithRetry(`${BASE_URL}/points/${lat},${lon}`);
-  return data.properties;
+  const key = `${lat},${lon}`;
+  if (!gridPointCache.has(key)) {
+    const data = await fetchWithRetry(`${BASE_URL}/points/${lat},${lon}`);
+    gridPointCache.set(key, data.properties);
+  }
+  return gridPointCache.get(key);
+}
+
+// The newest observation often arrives with the temperature still blank.
+// Walk back through the last few reports to find one that has it.
+async function getLatestCompleteObservation(stationId) {
+  const latest = await fetchWithRetry(`${BASE_URL}/stations/${stationId}/observations/latest`);
+  if (latest.properties?.temperature?.value != null) return latest.properties;
+
+  try {
+    const recent = await fetchWithRetry(`${BASE_URL}/stations/${stationId}/observations?limit=8`, 1);
+    const complete = (recent.features || []).find(f => f.properties?.temperature?.value != null);
+    if (complete) return complete.properties;
+  } catch (error) {
+    // Fall through to the incomplete report
+  }
+  return latest.properties;
+}
+
+// NWS wind chill formula (valid at or below 50 deg F with wind above 3 mph).
+function calculateWindChill(tempF, windMph) {
+  if (tempF == null) return null;
+  if (windMph == null || tempF > 50 || windMph <= 3) return Math.round(tempF);
+  const v = Math.pow(windMph, 0.16);
+  return Math.round(35.74 + 0.6215 * tempF - 35.75 * v + 0.4275 * tempF * v);
+}
+
+const stationCache = new Map();
+
+async function getNearestStation(location) {
+  const key = `${location.lat},${location.lon}`;
+  if (!stationCache.has(key)) {
+    const gridPoint = await getGridPoint(location.lat, location.lon);
+    const stationsData = await fetchWithRetry(gridPoint.observationStations);
+    const nearestStation = stationsData.features[0];
+    if (!nearestStation) {
+      throw new Error('No observation stations found');
+    }
+    stationCache.set(key, nearestStation.properties);
+  }
+  return stationCache.get(key);
+}
+
+// What the station actually recorded between two instants, e.g. this morning's
+// 5-9 AM bus window. Unlike "latest observation", the answer does not depend
+// on what time of day the question is asked.
+async function getObservedWindow(locationKey, startMs, endMs) {
+  const location = LOCATIONS[locationKey];
+  if (!location) {
+    throw new Error(`Unknown location: ${locationKey}`);
+  }
+
+  const station = await getNearestStation(location);
+  const url = `${BASE_URL}/stations/${station.stationIdentifier}/observations` +
+    `?start=${new Date(startMs).toISOString()}&end=${new Date(endMs).toISOString()}`;
+  const data = await fetchWithRetry(url);
+
+  const readings = (data.features || [])
+    .map(f => f.properties)
+    .filter(o => o.temperature?.value != null)
+    .map(o => {
+      const tempF = o.temperature.value * 9 / 5 + 32;
+      const windMph = o.windSpeed?.value != null ? o.windSpeed.value * 0.621371 : null;
+      return { tempF, windMph, windChillF: calculateWindChill(tempF, windMph) };
+    });
+
+  if (readings.length === 0) return null;
+
+  return {
+    station: station.name,
+    count: readings.length,
+    minTempF: Math.round(Math.min(...readings.map(r => r.tempF))),
+    minWindChillF: Math.min(...readings.map(r => r.windChillF))
+  };
 }
 
 async function getCurrentConditions(locationKey = 'indiana') {
@@ -44,21 +138,10 @@ async function getCurrentConditions(locationKey = 'indiana') {
     throw new Error(`Unknown location: ${locationKey}`);
   }
 
-  const gridPoint = await getGridPoint(location.lat, location.lon);
-  const stationsUrl = gridPoint.observationStations;
-
-  const stationsData = await fetchWithRetry(stationsUrl);
-  const nearestStation = stationsData.features[0];
-
-  if (!nearestStation) {
-    throw new Error('No observation stations found');
-  }
+  const nearestStation = { properties: await getNearestStation(location) };
 
   const stationId = nearestStation.properties.stationIdentifier;
-  const observationUrl = `${BASE_URL}/stations/${stationId}/observations/latest`;
-
-  const observation = await fetchWithRetry(observationUrl);
-  const props = observation.properties;
+  const props = await getLatestCompleteObservation(stationId);
 
   return {
     location: location.name,
@@ -152,33 +235,124 @@ async function getHourlyForecast(locationKey = 'indiana') {
 }
 
 async function getAlerts() {
-  // Use Pittsburgh forecast zone for western PA alerts
-  const alertsUrl = `${BASE_URL}/alerts/active?zone=PAZ021,PAZ020,PAZ019,PAZ018`;
+  const zones = [...INDIANA_COUNTY_ZONES, INDIANA_COUNTY_CODE, ...REGIONAL_ZONES];
+  const alertsUrl = `${BASE_URL}/alerts/active?zone=${zones.join(',')}`;
   const alerts = await fetchWithRetry(alertsUrl);
 
-  // Filter for Indiana County and surrounding Pittsburgh area
+  const indianaCodes = new Set([...INDIANA_COUNTY_ZONES, INDIANA_COUNTY_CODE]);
   const westernPACounties = ['indiana', 'allegheny', 'westmoreland', 'armstrong', 'cambria', 'jefferson', 'clearfield'];
 
-  const relevantAlerts = alerts.features.filter(alert => {
-    const areas = (alert.properties.areaDesc || '').toLowerCase();
-    return westernPACounties.some(county => areas.includes(county));
-  });
+  const relevantAlerts = (alerts.features || [])
+    .map(alert => {
+      const props = alert.properties;
+      const ugc = props.geocode?.UGC || [];
+      return {
+        id: props.id,
+        event: props.event,
+        severity: props.severity,
+        certainty: props.certainty,
+        urgency: props.urgency,
+        headline: props.headline,
+        description: props.description,
+        instruction: props.instruction,
+        // onset/ends bracket the weather itself. `expires` is only when this
+        // bulletin is due to be reissued, usually hours before the event ends.
+        onset: props.onset || props.effective,
+        ends: props.ends || props.expires,
+        expires: props.expires,
+        areas: props.areaDesc,
+        zones: ugc,
+        affectsIndianaCounty: ugc.some(code => indianaCodes.has(code))
+      };
+    })
+    .filter(alert => {
+      if (alert.affectsIndianaCounty) return true;
+      const areas = (alert.areas || '').toLowerCase();
+      return westernPACounties.some(county => areas.includes(county));
+    })
+    // Indiana County's own alerts lead the list
+    .sort((a, b) => Number(b.affectsIndianaCounty) - Number(a.affectsIndianaCounty));
 
   return {
     count: relevantAlerts.length,
-    alerts: relevantAlerts.map(alert => ({
-      id: alert.properties.id,
-      event: alert.properties.event,
-      severity: alert.properties.severity,
-      certainty: alert.properties.certainty,
-      urgency: alert.properties.urgency,
-      headline: alert.properties.headline,
-      description: alert.properties.description,
-      instruction: alert.properties.instruction,
-      onset: alert.properties.onset,
-      expires: alert.properties.expires,
-      areas: alert.properties.areaDesc
+    alerts: relevantAlerts
+  };
+}
+
+// --- Quantitative forecast grid ---------------------------------------------
+//
+// The NWS grid carries the forecasters' actual numbers (inches of snow and ice
+// per period, hourly wind chill) for a 2.5 km cell. Reading these beats pulling
+// numbers back out of the worded forecast, where "1 to 2 inches" of rain looks
+// the same as "1 to 2 inches" of snow.
+
+const MM_PER_INCH = 25.4;
+const GRID_FIELDS = {
+  snowfallAmount: mm => mm / MM_PER_INCH,          // inches
+  iceAccumulation: mm => mm / MM_PER_INCH,         // inches
+  windChill: c => c * 9 / 5 + 32,                  // deg F
+  apparentTemperature: c => c * 9 / 5 + 32,        // deg F
+  temperature: c => c * 9 / 5 + 32,                // deg F
+  windSpeed: kmh => kmh * 0.621371,                // mph
+  probabilityOfPrecipitation: pct => pct           // percent
+};
+
+// "PT6H", "P1DT6H", "PT30M" -> milliseconds
+function parseIsoDuration(duration) {
+  const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/.exec(duration || '');
+  if (!match) return 0;
+  const [, days = 0, hours = 0, minutes = 0] = match;
+  return ((Number(days) * 24 + Number(hours)) * 60 + Number(minutes)) * 60 * 1000;
+}
+
+// "2026-11-25T12:00:00+00:00/PT6H" -> { start, end } in epoch ms
+function parseValidTime(validTime) {
+  const [startIso, duration] = String(validTime).split('/');
+  const start = Date.parse(startIso);
+  return { start, end: start + parseIsoDuration(duration) };
+}
+
+function normalizeGridSeries(field, convert) {
+  return (field?.values || [])
+    .map(({ validTime, value }) => ({
+      ...parseValidTime(validTime),
+      value: value == null ? null : convert(value)
     }))
+    .filter(point => Number.isFinite(point.start) && point.end > point.start);
+}
+
+// Precipitation types by period: [{ start, end, types: [{ weather, coverage, intensity }] }]
+function normalizeGridWeather(field) {
+  return (field?.values || [])
+    .map(({ validTime, value }) => ({
+      ...parseValidTime(validTime),
+      types: (value || [])
+        .filter(w => w && w.weather)
+        .map(w => ({ weather: w.weather, coverage: w.coverage, intensity: w.intensity }))
+    }))
+    .filter(point => Number.isFinite(point.start) && point.end > point.start);
+}
+
+// Quantitative forecast for a location key or a { lat, lon } point.
+async function getGridForecast(target = 'indiana') {
+  const location = typeof target === 'string' ? LOCATIONS[target] : target;
+  if (!location) {
+    throw new Error(`Unknown location: ${target}`);
+  }
+
+  const gridPoint = await getGridPoint(location.lat, location.lon);
+  const data = await fetchWithRetry(gridPoint.forecastGridData, 2);
+  const props = data.properties;
+
+  const series = {};
+  for (const [name, convert] of Object.entries(GRID_FIELDS)) {
+    series[name] = normalizeGridSeries(props[name], convert);
+  }
+  series.weather = normalizeGridWeather(props.weather);
+
+  return {
+    updated: props.updateTime,
+    series
   };
 }
 
@@ -195,7 +369,13 @@ module.exports = {
   getCurrentConditions,
   getForecast,
   getHourlyForecast,
+  getGridForecast,
+  getObservedWindow,
   getAlerts,
   getLocations,
-  LOCATIONS
+  parseValidTime,
+  calculateWindChill,
+  LOCATIONS,
+  INDIANA_COUNTY_ZONES,
+  INDIANA_COUNTY_CODE
 };

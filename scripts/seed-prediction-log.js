@@ -6,6 +6,11 @@
  * using the same weather-based thresholds, then compares to the actual outcome.
  * This bootstraps the self-audit accuracy display so it shows data immediately
  * instead of waiting days for the daily workflow to accumulate entries.
+ *
+ * NOTE: entries written here (source: "backtest") are no longer counted by the
+ * self-audit. They are built from days already known to be disruptions, with an
+ * assumed alert added, so they score 100% by construction. To test the model
+ * against history, use scripts/backtest.js, which replays real archived alerts.
  */
 
 const fs = require('fs');

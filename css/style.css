@@ -474,6 +474,7 @@ section h2 {
 .delay-info .status-label.low { color: #a3e635; }
 .delay-info .status-label.moderate { color: #fbbf24; }
 .delay-info .status-label.high { color: #f87171; }
+.delay-info .status-label.unknown { color: #94a3b8; }
 
 .delay-info .recommendation {
   color: #E5E7EB;

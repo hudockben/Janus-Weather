@@ -2,18 +2,19 @@
 /**
  * Daily Weather Logger Script
  *
- * Run this script once daily (recommended: 7-8 AM EST during school year)
- * to automatically log weather conditions and school statuses to historicalData.json
+ * Each run records today's school statuses, scores the forecast that was on
+ * file for today, and saves the forecast for the next school day. It is safe
+ * to run several times a day: outcomes are recorded once, and a later run
+ * simply refreshes the forecast with newer data.
+ *
+ * Run it at least once on school-day mornings (statuses are readable from
+ * 6 AM Eastern) and once in the evening (so the forecast on file is the one
+ * people actually see the night before).
  *
  * Usage:
- *   node scripts/daily-weather-log.js              # Normal mode (log disruptions only)
- *   node scripts/daily-weather-log.js --force      # Force log even if schools are open
+ *   node scripts/daily-weather-log.js              # Normal mode
+ *   node scripts/daily-weather-log.js --force      # Also log open days outside winter
  *   node scripts/daily-weather-log.js --dry-run    # Preview without saving
- *
- * Scheduling Examples:
- *
- * Cron (Linux/Mac):
- *   0 7 * * 1-5 cd /path/to/Janus-Weather && node scripts/daily-weather-log.js
  *
  * GitHub Actions: See .github/workflows/daily-weather-log.yml
  */
@@ -34,7 +35,7 @@ async function main() {
   console.log('Janus Weather - Daily Weather Logger');
   console.log(`Date: ${new Date().toISOString()}`);
   console.log(`Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE'}`);
-  console.log(`Force Log: ${forceLog ? 'Yes' : 'No (disruptions only)'}`);
+  console.log(`Force Log: ${forceLog ? 'Yes' : 'No'}`);
   console.log('='.repeat(60));
   console.log('');
 
@@ -42,11 +43,11 @@ async function main() {
     const result = await logWeatherData({ forceLog, dryRun });
 
     if (result.summary && result.summary.weatherConditions) {
-      console.log('Weather Conditions:');
-      console.log(`  Temperature: ${result.summary.weatherConditions.temperature ?? 'N/A'}°F`);
-      console.log(`  Wind Chill: ${result.summary.weatherConditions.windChill ?? 'N/A'}°F`);
-      console.log(`  Snowfall: ${result.summary.weatherConditions.snowfall ?? 0}"`);
-      console.log(`  Type: ${result.summary.weatherConditions.type || 'None'}`);
+      const conditions = result.summary.weatherConditions;
+      console.log('This Morning (5-9 AM at the Indiana County airport):');
+      console.log(`  Low Temperature: ${conditions.temperature ?? 'N/A'}°F`);
+      console.log(`  Low Wind Chill: ${conditions.windChill ?? 'N/A'}°F`);
+      console.log(`  Winter Alerts: ${conditions.alerts && conditions.alerts.length ? conditions.alerts.join(', ') : 'None'}`);
       console.log('');
     } else {
       console.log('Weather Conditions: Unable to fetch (network error?)');
@@ -70,6 +71,17 @@ async function main() {
       });
     }
     console.log('');
+
+    if (result.predictions) {
+      const { resolved, targetDate, savedForTarget, forecast } = result.predictions;
+      console.log(`Forecasts scored for today: ${resolved}`);
+      console.log(`Forecast for ${targetDate} (${savedForTarget} saved):`);
+      forecast.forEach(f => {
+        const why = f.factors.length ? ` - ${f.factors.join('; ')}` : '';
+        console.log(`  - ${f.school}: ${f.probability}% (delay ${f.delayProbability}%, closure ${f.closureProbability}%)${why}`);
+      });
+      console.log('');
+    }
 
     if (result.errors.length > 0) {
       console.log('Errors:');

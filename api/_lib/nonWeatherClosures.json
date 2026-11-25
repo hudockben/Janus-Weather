@@ -3,5 +3,25 @@
     "date": "2026-02-09",
     "schools": "Indiana",
     "reason": "Teacher inservice day"
+  },
+  {
+    "date": "2026-04-03",
+    "schools": "all",
+    "reason": "Good Friday"
+  },
+  {
+    "date": "2026-04-06",
+    "schools": "all",
+    "reason": "Easter Monday"
+  },
+  {
+    "date": "2026-05-25",
+    "schools": "all",
+    "reason": "Memorial Day"
+  },
+  {
+    "date": "2026-09-07",
+    "schools": "all",
+    "reason": "Labor Day"
   }
 ]

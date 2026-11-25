@@ -1,6 +1,13 @@
 // School Delay Prediction for Indiana County, PA
 // Analyzes weather conditions to estimate delay/closure probability
 
+const { buildFeatures, ALERT_TIMING } = require('./features');
+const { getNonSchoolReason, getTargetSchoolDay } = require('./schoolCalendar');
+
+// lat/lon is the point whose NWS forecast grid represents the district.
+// zones are the NWS forecast zones its bus routes run through: PAZ077 is
+// "Indiana", PAZ078 is "Higher Elevations of Indiana" (the southeast ridges),
+// which regularly gets a warning while the rest of the county gets an advisory.
 const INDIANA_COUNTY_SCHOOLS = [
   {
     name: 'Indiana Area School District',
@@ -8,7 +15,10 @@ const INDIANA_COUNTY_SCHOOLS = [
     shortName: 'Indiana Area',
     website: 'https://www.iasd.cc',
     statusUrl: 'https://www.iasd.cc',
-    twitter: '@IndianaAreaSD'
+    twitter: '@IndianaAreaSD',
+    lat: 40.6215,
+    lon: -79.1525,
+    zones: ['PAZ077']
   },
   {
     name: 'Homer-Center School District',
@@ -16,7 +26,10 @@ const INDIANA_COUNTY_SCHOOLS = [
     shortName: 'Homer-Center',
     website: 'https://www.homercenter.org',
     statusUrl: 'https://www.homercenter.org',
-    twitter: null
+    twitter: null,
+    lat: 40.5423,
+    lon: -79.1556,
+    zones: ['PAZ077']
   },
   {
     name: 'Marion Center Area School District',
@@ -24,15 +37,23 @@ const INDIANA_COUNTY_SCHOOLS = [
     shortName: 'Marion Center',
     website: 'https://www.mcasd.net',
     statusUrl: 'https://www.mcasd.net',
-    twitter: null
+    twitter: null,
+    lat: 40.7687,
+    lon: -79.0467,
+    zones: ['PAZ077']
   },
   {
+    // Clymer sits in the lower zone; the schools near Heilwood and the eastern
+    // half of the district are in the higher-elevation zone.
     name: 'Penns Manor Area School District',
     code: 'PMASD',
     shortName: 'Penns Manor',
     website: 'https://www.pennsmanor.org',
     statusUrl: 'https://www.pennsmanor.org',
-    twitter: null
+    twitter: null,
+    lat: 40.6367,
+    lon: -78.9539,
+    zones: ['PAZ077', 'PAZ078']
   },
   {
     name: 'Purchase Line School District',
@@ -40,7 +61,10 @@ const INDIANA_COUNTY_SCHOOLS = [
     shortName: 'Purchase Line',
     website: 'https://www.plsd.k12.pa.us',
     statusUrl: 'https://www.plsd.k12.pa.us',
-    twitter: null
+    twitter: null,
+    lat: 40.7092,
+    lon: -78.9447,
+    zones: ['PAZ077']
   },
   {
     name: 'United School District',
@@ -48,7 +72,10 @@ const INDIANA_COUNTY_SCHOOLS = [
     shortName: 'United',
     website: 'https://www.unitedsd.net',
     statusUrl: 'https://www.unitedsd.net',
-    twitter: null
+    twitter: null,
+    lat: 40.4536,
+    lon: -79.0314,
+    zones: ['PAZ078']
   }
 ];
 
@@ -64,7 +91,8 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 async function checkSchoolCast() {
   try {
     const response = await fetch('https://schoolcast.iu28.org', {
-      headers: { 'User-Agent': 'JanusForecastModel/1.0' }
+      headers: { 'User-Agent': 'JanusForecastModel/1.0' },
+      signal: AbortSignal.timeout(8000)
     });
     if (!response.ok) return null;
     const html = await response.text();
@@ -84,7 +112,8 @@ async function checkLocalRadio() {
   for (const url of urls) {
     try {
       const response = await fetch(url, {
-        headers: { 'User-Agent': 'JanusForecastModel/1.0' }
+        headers: { 'User-Agent': 'JanusForecastModel/1.0' },
+        signal: AbortSignal.timeout(8000)
       });
       if (!response.ok) continue;
       const html = await response.text();
@@ -96,7 +125,98 @@ async function checkLocalRadio() {
   return null;
 }
 
-// Pattern matching for school names in HTML content
+// --- SchoolCast parsing --------------------------------------------------------
+//
+// SchoolCast prints one block per district under a dated header:
+//
+//   <h4>Status for Monday, November 16, 2026</h4>
+//   <p class="sc_entname">Indiana Area</p>
+//   <p class="sc_entstatus">2 Hour Delay</p>
+//
+// The header date matters: the page keeps showing the last posted statuses
+// until someone changes them, and the evening before a storm it already shows
+// tomorrow's. A status only describes a given day if the header says so.
+
+// District names as SchoolCast prints them (lower case). A longer form of the
+// same name also matches, e.g. "Marion Center Area".
+const SCHOOLCAST_NAMES = {
+  'IASD': ['indiana area'],
+  'HCSD': ['homer-center', 'homer center'],
+  'MCASD': ['marion center'],
+  'PMASD': ['penns manor'],
+  'PLSD': ['purchase line'],
+  'USD': ['united']
+};
+
+function findSchoolCastEntry(entries, schoolCode) {
+  const names = SCHOOLCAST_NAMES[schoolCode] || [];
+  const key = Object.keys(entries).find(entryName =>
+    names.some(name => entryName === name || entryName.startsWith(`${name} `)));
+  return key ? entries[key] : null;
+}
+
+const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july',
+  'august', 'september', 'october', 'november', 'december'];
+
+// Map SchoolCast's status label (plus any note under it) to our status names
+function classifyStatusText(statusText, detailText = '') {
+  const status = (statusText || '').toLowerCase();
+  const everything = `${status} ${(detailText || '').toLowerCase()}`;
+  const remote = /flexible instruction|remote (learning|instruction)|virtual/;
+
+  if (/^\s*(open|on time|normal)/.test(status)) return 'open';
+  if (remote.test(everything)) return 'flexible instruction';
+  if (/clos/.test(status)) return 'closed';
+  if (/delay/.test(status)) return /(2|two)[\s-]*h(ou)?r/.test(status) ? '2-hour delay' : 'delayed';
+  if (/dismiss/.test(status)) return 'early dismissal';
+  return 'unknown';
+}
+
+// Parse the SchoolCast page into { statusDate, entries: { name: { status, raw, detail } } }
+function parseSchoolCast(html) {
+  if (!html) return null;
+
+  const entries = {};
+  const names = [...html.matchAll(/class="sc_entname"[^>]*>([^<]*)</gi)];
+
+  names.forEach((match, i) => {
+    const blockEnd = i + 1 < names.length ? names[i + 1].index : match.index + 2000;
+    // Stop at the end of this district's block so a neighbor's status or the
+    // next section heading can never leak in.
+    const block = html.slice(match.index, blockEnd).split(/<div class="sc_entity"|<h[1-6]|<!--/i)[0];
+    const status = block.match(/class="sc_entstatus"[^>]*>([^<]*)</i);
+    if (!status) return;
+
+    // (the match ends on the '<' of the closing tag; keep it so the tag strips cleanly)
+    const detail = block.slice(status.index + status[0].length - 1)
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    entries[match[1].trim().toLowerCase()] = {
+      status: classifyStatusText(status[1], detail),
+      raw: status[1].trim(),
+      detail
+    };
+  });
+
+  if (Object.keys(entries).length === 0) return null;
+
+  let statusDate = null;
+  const header = html.match(/Status for\s+(?:[A-Za-z]+,\s*)?([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/i);
+  if (header) {
+    const month = MONTHS.indexOf(header[1].toLowerCase()) + 1;
+    if (month > 0) {
+      statusDate = `${header[3]}-${String(month).padStart(2, '0')}-${header[2].padStart(2, '0')}`;
+    }
+  }
+
+  return { statusDate, entries };
+}
+
+// Loose keyword matching for pages without SchoolCast's structure (the radio
+// station fallback). Good enough to show on the site, not to keep as a record.
 const SCHOOL_PATTERNS = {
   'IASD': ['indiana area'],
   'HCSD': ['homer-center', 'homer center'],
@@ -106,7 +226,6 @@ const SCHOOL_PATTERNS = {
   'USD': ['united']
 };
 
-// Parse school status from HTML content
 function parseSchoolStatus(schoolCode, htmlContent) {
   if (!htmlContent) return 'unknown';
 
@@ -145,7 +264,10 @@ function parseSchoolStatus(schoolCode, htmlContent) {
   return 'unknown';
 }
 
-// Get current status for all schools
+// Get current status for all schools.
+//
+// Each entry carries `statusDate` (the day SchoolCast says its statuses are
+// for) and `source`. Only source 'SchoolCast' is reliable enough to log.
 async function getSchoolStatuses() {
   const now = Date.now();
 
@@ -154,30 +276,48 @@ async function getSchoolStatuses() {
     return statusCache.statuses;
   }
 
-  // Try SchoolCast first (official ARIN IU28 source), then local radio as fallback
-  let html = await checkSchoolCast();
-  let source = 'SchoolCast';
-
-  if (!html) {
-    html = await checkLocalRadio();
-    source = 'Local Radio';
-  }
-
+  const lastChecked = new Date().toISOString();
   const statuses = {};
 
-  for (const school of INDIANA_COUNTY_SCHOOLS) {
-    let status = parseSchoolStatus(school.code, html);
+  const schoolCastHtml = await checkSchoolCast();
+  const schoolCast = parseSchoolCast(schoolCastHtml);
 
-    // If source is available but school not mentioned, assume open
-    if (status === 'unknown' && html) {
-      status = 'open';
+  if (schoolCast) {
+    for (const school of INDIANA_COUNTY_SCHOOLS) {
+      const entry = findSchoolCastEntry(schoolCast.entries, school.code);
+      statuses[school.code] = {
+        // SchoolCast lists every district every day. One that is missing means
+        // the page changed, so say 'unknown' rather than guessing 'open'.
+        status: entry ? entry.status : 'unknown',
+        source: 'SchoolCast',
+        statusDate: schoolCast.statusDate,
+        raw: entry ? entry.raw : null,
+        detail: entry ? entry.detail : '',
+        lastChecked
+      };
     }
+  } else {
+    // SchoolCast is down or changed its layout: fall back to keyword matching
+    const html = schoolCastHtml || await checkLocalRadio();
+    const source = schoolCastHtml ? 'SchoolCast (unstructured)' : 'Local Radio';
 
-    statuses[school.code] = {
-      status: status,
-      source: html ? source : 'unavailable',
-      lastChecked: new Date().toISOString()
-    };
+    for (const school of INDIANA_COUNTY_SCHOOLS) {
+      let status = parseSchoolStatus(school.code, html);
+
+      // If source is available but school not mentioned, assume open
+      if (status === 'unknown' && html) {
+        status = 'open';
+      }
+
+      statuses[school.code] = {
+        status,
+        source: html ? source : 'unavailable',
+        statusDate: null,
+        raw: null,
+        detail: '',
+        lastChecked
+      };
+    }
   }
 
   // Update cache
@@ -189,8 +329,30 @@ async function getSchoolStatuses() {
   return statuses;
 }
 
-// Historical data for pattern-based predictions
-const historicalData = require('./historicalData.json');
+// --- History ---------------------------------------------------------------------
+
+const rawHistoricalData = require('./historicalData.json');
+
+const SCHOOL_NAME_FIXES = { 'Homer Center': 'Homer-Center' };
+
+// Above this morning temperature a closure cannot be about snow, ice or cold.
+const NON_WINTER_TEMP_F = 45;
+
+// A closure with nothing wintry going on (holiday, in-service day, building
+// problem, summer heat) teaches the model nothing about weather.
+function isNonWeatherRecord(record) {
+  if (record.status === 'open') return false;
+  if (record.cause === 'non-winter') return true;
+  if (record.temperature >= NON_WINTER_TEMP_F) return true;
+  const reason = getNonSchoolReason(record.date, record.school);
+  return reason !== null && reason !== 'Weekend';
+}
+
+// History the model is allowed to learn from: district names made consistent,
+// non-weather closures removed.
+const historicalData = rawHistoricalData
+  .map(record => ({ ...record, school: SCHOOL_NAME_FIXES[record.school] || record.school }))
+  .filter(record => !isNonWeatherRecord(record));
 
 // Categorize a weather event based on snowfall and type
 function categorizeEvent(snow, type) {
@@ -202,104 +364,89 @@ function categorizeEvent(snow, type) {
   return 'cold-only';
 }
 
-// Find similar historical days and calculate outcome rates
-function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) {
-  if (!historicalData || historicalData.length === 0) return null;
+const CLOSURE_LIKE = new Set(['closed', 'flexible instruction day']);
+const DELAY_LIKE = new Set(['delay', 'early dismissal']);
 
-  // Skip matching for mild/non-winter conditions - our dataset is winter events
-  // and matching against it on mild days produces misleading results
+// Find the most similar past days and tally how they turned out.
+//
+// Note what this can and cannot say. Before Feb 2026 only disruptions were
+// recorded, so "8 of 8 similar days had a delay" mostly reflects which days got
+// written down, not the odds of a delay. The tally is therefore used to judge
+// delay-versus-closure once a disruption is likely, and shown for context, but
+// it does not set the overall probability.
+function findSimilarDays(temperature, feelsLike, snowfall, weatherType, { schoolName = null, limit = 8 } = {}) {
+  // Skip matching for mild/non-winter conditions - the dataset is winter events
   const type = (weatherType || '').toLowerCase();
-  if (snowfall === 0 && !type.includes('snow') && !type.includes('ice') && !type.includes('frigid') && !type.includes('cold')) return null;
+  if (!(snowfall > 0) && !type.includes('snow') && !type.includes('ice') && !type.includes('frigid') && !type.includes('cold')) return null;
+  if (temperature == null || feelsLike == null) return null;
+
+  const records = schoolName ? historicalData.filter(r => r.school === schoolName) : historicalData;
+  if (records.length === 0) return null;
 
   const currentCategory = categorizeEvent(snowfall, weatherType);
 
-  // Score each historical record by similarity to current conditions
-  const scored = historicalData.map(record => {
-    let similarity = 0;
+  const scored = records.map(record => {
+    // A day with 0" of snow should never match a day with 6"+
+    const snowDiff = Math.abs(record.snowfall - snowfall);
+    if (snowDiff > 5) return null;
 
+    // Wind chill drives decisions: 10 deg F is a different day from -17 deg F
+    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
+    if (feelsDiff > 20) return null;
+
+    let similarity = 0;
     const recordCategory = categorizeEvent(record.snowfall, record.type);
 
-    // DISQUALIFY: If snowfall difference is too large (>5 inches), skip this record
-    // A day with 0" snow should never match a day with 6"+ snow
-    const snowDiff = Math.abs(record.snowfall - snowfall);
-    if (snowDiff > 5) {
-      return { ...record, similarity: 0, disqualified: true };
-    }
-
-    // DISQUALIFY: If feels-like difference is too large (>20°F), skip this record
-    // Wind chill is a primary factor in school decisions - a day that feels like
-    // 10°F is fundamentally different from one that feels like -17°F
-    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
-    if (feelsDiff > 20) {
-      return { ...record, similarity: 0, disqualified: true };
-    }
-
-    // Category matching - critical for finding truly similar days
     if (currentCategory === recordCategory) {
-      similarity += 4; // Bonus for matching category
+      similarity += 4;
     } else if (
       (currentCategory === 'cold-only' && recordCategory === 'heavy-snow') ||
       (currentCategory === 'heavy-snow' && recordCategory === 'cold-only')
     ) {
-      // Completely different event types - strong penalty
       similarity -= 6;
     } else {
-      // Adjacent categories (e.g., cold-only vs light-snow) - moderate penalty
       similarity -= 2;
     }
 
-    // Temperature similarity (within 10°F = good match)
     const tempDiff = Math.abs(record.temperature - temperature);
     if (tempDiff <= 5) similarity += 3;
     else if (tempDiff <= 10) similarity += 2;
     else if (tempDiff <= 15) similarity += 1;
 
-    // Feels-like similarity - higher weight since wind chill drives school decisions
     if (feelsDiff <= 5) similarity += 4;
     else if (feelsDiff <= 10) similarity += 3;
     else if (feelsDiff <= 15) similarity += 2;
     else similarity += 1;
 
-    // Snowfall similarity - stricter scoring
     if (snowDiff <= 0.5) similarity += 4;
     else if (snowDiff <= 1) similarity += 3;
     else if (snowDiff <= 2) similarity += 2;
     else if (snowDiff <= 3) similarity += 1;
-    // No points for snowDiff > 3
 
-    // Weather type match (reduced weight since category matching handles this)
-    const currentType = (weatherType || '').toLowerCase();
     const recordType = (record.type || '').toLowerCase();
-    if (currentType && recordType && currentType === recordType) similarity += 2;
-    else if (currentType && recordType &&
-             (currentType.includes(recordType) || recordType.includes(currentType))) similarity += 1;
+    if (type && recordType && type === recordType) similarity += 2;
+    else if (type && recordType && (type.includes(recordType) || recordType.includes(type))) similarity += 1;
 
     return { ...record, similarity };
   });
 
-  // Filter to reasonably similar days (similarity >= 5) and not disqualified
-  const similar = scored.filter(r => !r.disqualified && r.similarity >= 5)
-                        .sort((a, b) => b.similarity - a.similarity);
+  const matches = scored
+    .filter(r => r && r.similarity >= 5)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
 
-  if (similar.length === 0) return null;
+  if (matches.length === 0) return null;
 
-  // Take the top matches (up to 8)
-  const matches = similar.slice(0, 8);
-
-  const closedCount = matches.filter(r => r.status === 'closed').length;
-  const delayCount = matches.filter(r => r.status === 'delay').length;
-  const totalDisruptions = closedCount + delayCount;
-  const disruptionRate = Math.round((totalDisruptions / matches.length) * 100);
-  const closureRate = Math.round((closedCount / matches.length) * 100);
-  const delayRate = Math.round((delayCount / matches.length) * 100);
+  const closedCount = matches.filter(r => CLOSURE_LIKE.has(r.status)).length;
+  const delayCount = matches.filter(r => DELAY_LIKE.has(r.status)).length;
 
   return {
     matchCount: matches.length,
     closedCount,
     delayCount,
-    disruptionRate,
-    closureRate,
-    delayRate,
+    disruptionRate: Math.round(((closedCount + delayCount) / matches.length) * 100),
+    closureRate: Math.round((closedCount / matches.length) * 100),
+    delayRate: Math.round((delayCount / matches.length) * 100),
     topMatches: matches.slice(0, 3).map(m => ({
       school: m.school,
       date: m.date,
@@ -312,502 +459,265 @@ function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) 
   };
 }
 
-// Get historical prediction for a specific school
+function getHistoricalPrediction(temperature, feelsLike, snowfall, weatherType) {
+  return findSimilarDays(temperature, feelsLike, snowfall, weatherType);
+}
+
 function getSchoolHistoricalPrediction(schoolName, temperature, feelsLike, snowfall, weatherType) {
-  if (!historicalData || historicalData.length === 0) return null;
-
-  // Skip matching for mild/non-winter conditions
-  const type = (weatherType || '').toLowerCase();
-  if (snowfall === 0 && !type.includes('snow') && !type.includes('ice') && !type.includes('frigid') && !type.includes('cold')) return null;
-
-  // Filter historical data for this specific school
-  const schoolData = historicalData.filter(r => r.school === schoolName);
-  if (schoolData.length === 0) return null;
-
-  const currentCategory = categorizeEvent(snowfall, weatherType);
-
-  // Score each historical record by similarity to current conditions
-  const scored = schoolData.map(record => {
-    let similarity = 0;
-
-    const recordCategory = categorizeEvent(record.snowfall, record.type);
-
-    // DISQUALIFY: If snowfall difference is too large (>5 inches), skip this record
-    const snowDiff = Math.abs(record.snowfall - snowfall);
-    if (snowDiff > 5) {
-      return { ...record, similarity: 0, disqualified: true };
-    }
-
-    // DISQUALIFY: If feels-like difference is too large (>20°F), skip this record
-    const feelsDiff = Math.abs(record.feelsLike - feelsLike);
-    if (feelsDiff > 20) {
-      return { ...record, similarity: 0, disqualified: true };
-    }
-
-    // Category matching
-    if (currentCategory === recordCategory) {
-      similarity += 4;
-    } else if (
-      (currentCategory === 'cold-only' && recordCategory === 'heavy-snow') ||
-      (currentCategory === 'heavy-snow' && recordCategory === 'cold-only')
-    ) {
-      similarity -= 6;
-    } else {
-      similarity -= 2;
-    }
-
-    // Temperature similarity
-    const tempDiff = Math.abs(record.temperature - temperature);
-    if (tempDiff <= 5) similarity += 3;
-    else if (tempDiff <= 10) similarity += 2;
-    else if (tempDiff <= 15) similarity += 1;
-
-    // Feels-like similarity - higher weight since wind chill drives school decisions
-    if (feelsDiff <= 5) similarity += 4;
-    else if (feelsDiff <= 10) similarity += 3;
-    else if (feelsDiff <= 15) similarity += 2;
-    else similarity += 1;
-
-    // Snowfall similarity
-    if (snowDiff <= 0.5) similarity += 4;
-    else if (snowDiff <= 1) similarity += 3;
-    else if (snowDiff <= 2) similarity += 2;
-    else if (snowDiff <= 3) similarity += 1;
-
-    // Weather type match
-    const currentType = (weatherType || '').toLowerCase();
-    const recordType = (record.type || '').toLowerCase();
-    if (currentType && recordType && currentType === recordType) similarity += 2;
-    else if (currentType && recordType &&
-             (currentType.includes(recordType) || recordType.includes(currentType))) similarity += 1;
-
-    return { ...record, similarity };
-  });
-
-  // Filter to reasonably similar days
-  const similar = scored.filter(r => !r.disqualified && r.similarity >= 5)
-                        .sort((a, b) => b.similarity - a.similarity);
-
-  if (similar.length === 0) return null;
-
-  // Take up to 5 matches for per-school (fewer records available)
-  const matches = similar.slice(0, 5);
-
-  const closedCount = matches.filter(r => r.status === 'closed').length;
-  const delayCount = matches.filter(r => r.status === 'delay').length;
-  const totalDisruptions = closedCount + delayCount;
-
-  return {
-    matchCount: matches.length,
-    closedCount,
-    delayCount,
-    closureRate: Math.round((closedCount / matches.length) * 100),
-    delayRate: Math.round((delayCount / matches.length) * 100),
-    disruptionRate: Math.round((totalDisruptions / matches.length) * 100)
-  };
+  return findSimilarDays(temperature, feelsLike, snowfall, weatherType, { schoolName, limit: 5 });
 }
 
-// Weather condition thresholds for school delays
-const THRESHOLDS = {
-  // Temperature thresholds (Fahrenheit)
-  extremeCold: -10,        // Wind chill below this = likely closure
-  veryCold: 0,             // Wind chill below this = possible delay
-  cold: 10,                // Wind chill below this = monitor
-
-  // Snow thresholds (inches)
-  heavySnow: 6,            // 6+ inches = likely closure
-  moderateSnow: 3,         // 3-6 inches = likely delay
-  lightSnow: 1,            // 1-3 inches = possible delay
-
-  // Wind thresholds (mph)
-  highWind: 40,            // High winds = increased risk
-
-  // Ice accumulation (inches)
-  iceAccumulation: 0.1     // Any ice = high risk
-};
-
-// Analyze hourly forecast for morning conditions and precipitation timing
-function analyzeHourlyForecast(hourlyForecast) {
-  if (!hourlyForecast || !hourlyForecast.periods || hourlyForecast.periods.length === 0) {
-    return null;
-  }
-
-  const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  // Find periods for critical morning hours (4am-8am tomorrow)
-  const morningPeriods = hourlyForecast.periods.filter(period => {
-    const periodTime = new Date(period.startTime);
-    const hour = periodTime.getHours();
-    const isTomorrow = periodTime.getDate() === tomorrow.getDate() &&
-                       periodTime.getMonth() === tomorrow.getMonth();
-    return isTomorrow && hour >= 4 && hour <= 8;
-  });
-
-  // Find overnight periods (10pm tonight to 6am tomorrow)
-  const overnightPeriods = hourlyForecast.periods.filter(period => {
-    const periodTime = new Date(period.startTime);
-    const hour = periodTime.getHours();
-    const isTonight = periodTime.getDate() === now.getDate() && hour >= 22;
-    const isTomorrowEarly = periodTime.getDate() === tomorrow.getDate() && hour < 6;
-    return isTonight || isTomorrowEarly;
-  });
-
-  // Find afternoon periods (12pm-6pm tomorrow)
-  const afternoonPeriods = hourlyForecast.periods.filter(period => {
-    const periodTime = new Date(period.startTime);
-    const hour = periodTime.getHours();
-    const isTomorrow = periodTime.getDate() === tomorrow.getDate() &&
-                       periodTime.getMonth() === tomorrow.getMonth();
-    return isTomorrow && hour >= 12 && hour <= 18;
-  });
-
-  // Calculate morning conditions
-  let morningMinTemp = null;
-  let morningMaxWind = 0;
-  let morningHasPrecip = false;
-  let morningPrecipType = null;
-
-  morningPeriods.forEach(period => {
-    if (morningMinTemp === null || period.temperature < morningMinTemp) {
-      morningMinTemp = period.temperature;
-    }
-    const windSpeed = parseInt(period.windSpeed) || 0;
-    if (windSpeed > morningMaxWind) morningMaxWind = windSpeed;
-
-    const forecast = (period.shortForecast || '').toLowerCase();
-    if (forecast.includes('snow') || forecast.includes('flurries') ||
-        forecast.includes('ice') || forecast.includes('freezing') ||
-        forecast.includes('sleet')) {
-      morningHasPrecip = true;
-      if (forecast.includes('ice') || forecast.includes('freezing') || forecast.includes('sleet')) {
-        morningPrecipType = 'ice';
-      } else if (!morningPrecipType) {
-        morningPrecipType = 'snow';
-      }
-    }
-  });
-
-  // Analyze precipitation timing
-  let overnightPrecipHours = 0;
-  let afternoonPrecipHours = 0;
-
-  overnightPeriods.forEach(period => {
-    const forecast = (period.shortForecast || '').toLowerCase();
-    const hasWinterPrecip = forecast.includes('snow') || forecast.includes('ice') ||
-                            forecast.includes('freezing') || forecast.includes('sleet');
-    if (hasWinterPrecip || (period.probabilityOfPrecipitation || 0) >= 50) {
-      overnightPrecipHours++;
-    }
-  });
-
-  afternoonPeriods.forEach(period => {
-    const forecast = (period.shortForecast || '').toLowerCase();
-    const hasWinterPrecip = forecast.includes('snow') || forecast.includes('ice') ||
-                            forecast.includes('freezing') || forecast.includes('sleet');
-    if (hasWinterPrecip || (period.probabilityOfPrecipitation || 0) >= 50) {
-      afternoonPrecipHours++;
-    }
-  });
-
-  // Determine precipitation timing category
-  let precipTiming = 'none';
-  if (overnightPrecipHours >= 3 && afternoonPrecipHours < 2) {
-    precipTiming = 'overnight';  // Snow mostly overnight - worse for morning commute
-  } else if (afternoonPrecipHours >= 3 && overnightPrecipHours < 2) {
-    precipTiming = 'afternoon';  // Snow mostly afternoon - less impact on school
-  } else if (overnightPrecipHours >= 2 && afternoonPrecipHours >= 2) {
-    precipTiming = 'all-day';    // Snow throughout
-  } else if (overnightPrecipHours >= 1 || morningHasPrecip) {
-    precipTiming = 'morning';    // Some morning precipitation
-  }
-
-  return {
-    morningMinTemp,
-    morningMaxWind,
-    morningHasPrecip,
-    morningPrecipType,
-    overnightPrecipHours,
-    afternoonPrecipHours,
-    precipTiming
-  };
+// The weather label history records use, derived from the model's inputs
+function describeWeatherType(features) {
+  const snow = features.snowOvernightIn || 0;
+  if ((features.iceIn || 0) >= 0.01 || features.commutePrecip === 'ice') return 'ice';
+  if (snow >= 6) return 'heavy snow';
+  if (snow >= 0.3 || features.commutePrecip === 'snow' || features.alerts.some(a => a.kind === 'storm')) return 'snow';
+  if (features.minWindChillF != null && features.minWindChillF <= 10) return 'frigid temperature';
+  return '';
 }
 
-function calculateDelayProbability(currentConditions, forecast, hourlyForecast, alerts) {
-  let probability = 0;
-  let factors = [];
+// --- Scoring ---------------------------------------------------------------------
+//
+// Each factor carries the chance of a disruption if it were the only thing
+// going on. Factors combine as independent chances (1 - product of misses), so
+// stacking related signals - an advisory, the snow it was issued for, snow
+// still falling at bus time - raises the total without racing to 95%.
 
-  // Check for active winter weather alerts
-  if (alerts && alerts.length > 0) {
-    const winterAlerts = alerts.filter(alert => {
-      const event = (alert.event || '').toLowerCase();
-      return event.includes('winter') ||
-             event.includes('snow') ||
-             event.includes('ice') ||
-             event.includes('blizzard') ||
-             event.includes('freeze') ||
-             event.includes('cold');
-    });
+const PREDICT_DISRUPTION_AT = 50;   // percent: "more likely than not"
+const MAX_PROBABILITY = 95;
 
-    if (winterAlerts.length > 0) {
-      winterAlerts.forEach(alert => {
-        const severity = (alert.severity || '').toLowerCase();
-        if (severity === 'extreme') {
-          probability += 50;
-          factors.push({ factor: `${alert.event} (Extreme)`, impact: +50 });
-        } else if (severity === 'severe') {
-          probability += 40;
-          factors.push({ factor: `${alert.event} (Severe)`, impact: +40 });
-        } else if (severity === 'moderate') {
-          probability += 25;
-          factors.push({ factor: `${alert.event}`, impact: +25 });
-        } else {
-          probability += 15;
-          factors.push({ factor: `${alert.event}`, impact: +15 });
-        }
-      });
-    }
+function inches(value) {
+  return `${Math.round(value * 10) / 10}"`;
+}
+
+function collectFactors(features) {
+  const factors = [];
+  const add = (factor, chance) => factors.push({ factor, chance });
+
+  for (const alert of features.alerts) {
+    add(`${alert.event} ${ALERT_TIMING[alert.timing].label}`, alert.weight);
   }
 
-  // Analyze current temperature
-  if (currentConditions && currentConditions.temperature) {
-    const tempF = currentConditions.temperature.fahrenheit;
-    const windMph = currentConditions.windSpeed?.mph || 0;
+  const snow = features.snowOvernightIn || 0;
+  if (snow >= 6) add(`Heavy snow overnight (about ${inches(snow)})`, 0.60);
+  else if (snow >= 3) add(`Snow overnight (about ${inches(snow)})`, 0.40);
+  else if (snow >= 1) add(`Light snow overnight (about ${inches(snow)})`, 0.20);
+  else if (snow >= 0.3) add(`Dusting of snow overnight (${inches(snow)})`, 0.08);
 
-    // Calculate wind chill (simplified formula)
-    let windChill = tempF;
-    if (tempF <= 50 && windMph > 3) {
-      windChill = 35.74 + (0.6215 * tempF) - (35.75 * Math.pow(windMph, 0.16)) + (0.4275 * tempF * Math.pow(windMph, 0.16));
-      windChill = Math.round(windChill);
-    }
+  const daySnow = features.snowSchoolDayIn || 0;
+  if (daySnow >= 4) add(`Heavy snow during the school day (about ${inches(daySnow)})`, 0.35);
+  else if (daySnow >= 2) add(`Snow during the school day (about ${inches(daySnow)})`, 0.20);
+  else if (daySnow >= 1) add(`Light snow during the school day (about ${inches(daySnow)})`, 0.10);
 
-    if (windChill <= THRESHOLDS.extremeCold) {
-      probability += 40;
-      factors.push({ factor: `Extreme cold (wind chill ${windChill}°F)`, impact: +40 });
-    } else if (windChill <= THRESHOLDS.veryCold) {
-      probability += 25;
-      factors.push({ factor: `Very cold (wind chill ${windChill}°F)`, impact: +25 });
-    } else if (windChill <= THRESHOLDS.cold) {
-      probability += 10;
-      factors.push({ factor: `Cold temperatures (wind chill ${windChill}°F)`, impact: +10 });
-    }
+  const ice = features.iceIn || 0;
+  if (ice >= 0.25) add(`Significant icing (about ${Math.round(ice * 100) / 100}")`, 0.85);
+  else if (ice >= 0.1) add(`Ice accumulation (about ${Math.round(ice * 100) / 100}")`, 0.65);
+  else if (ice >= 0.01) add('Light icing possible', 0.40);
+
+  const chill = features.minWindChillF;
+  if (chill != null) {
+    if (chill <= -20) add(`Dangerous cold at bus time (${chill}°F wind chill)`, 0.60);
+    else if (chill <= -10) add(`Extreme cold at bus time (${chill}°F wind chill)`, 0.40);
+    else if (chill <= 0) add(`Very cold at bus time (${chill}°F wind chill)`, 0.20);
+    else if (chill <= 10) add(`Cold at bus time (${chill}°F wind chill)`, 0.05);
   }
 
-  // Analyze forecast for snow/ice keywords
-  if (forecast && forecast.periods && forecast.periods.length > 0) {
-    // Look at tonight and tomorrow morning periods
-    const relevantPeriods = forecast.periods.slice(0, 4);
+  if (features.commutePrecip === 'ice') add('Freezing rain or sleet falling at bus time', 0.25);
+  else if (features.commutePrecip === 'snow') add('Snow falling at bus time', 0.10);
 
-    // Track what precipitation factors have been added to avoid redundancies
-    // e.g. "Light snow forecast (2 inches)" and "Snow in forecast" shouldn't both appear
-    let snowFactorAdded = false;
-    let iceFactorAdded = false;
-    let bestSnowAmount = 0;
+  return factors.sort((a, b) => b.chance - a.chance);
+}
 
-    // First pass: find the highest snow amount across all periods
-    relevantPeriods.forEach(period => {
-      const desc = (period.detailedForecast || period.shortForecast || '').toLowerCase();
-      const snowMatch = desc.match(/(\d+)\s*(?:to\s*(\d+))?\s*inch/);
-      if (snowMatch) {
-        const amount = snowMatch[2] ? parseInt(snowMatch[2]) : parseInt(snowMatch[1]);
-        if (amount > bestSnowAmount) bestSnowAmount = amount;
-      }
-    });
+// Share of a disruption that is a closure rather than a delay. Advisory-level
+// snow and cold mostly produce two-hour delays here; warnings, 3"+ of snow and
+// real icing mostly close schools.
+function closureShareFromSeverity(features) {
+  const busTimeAlerts = features.alerts.filter(a => a.timing === 'bus-time');
+  const stormWarning = busTimeAlerts.some(a => a.kind === 'storm' && a.level === 'warning');
+  const coldWarning = busTimeAlerts.some(a => a.kind === 'cold' && a.level === 'warning');
+  const snow = features.snowOvernightIn || 0;
+  const daySnow = features.snowSchoolDayIn || 0;
+  const ice = features.iceIn || 0;
+  const chill = features.minWindChillF;
 
-    relevantPeriods.forEach(period => {
-      const desc = (period.detailedForecast || period.shortForecast || '').toLowerCase();
+  if (snow >= 6 || ice >= 0.25) return 0.85;
+  if (stormWarning) return 0.75;
+  if (snow >= 3 || ice >= 0.1 || snow + daySnow >= 5) return 0.65;
+  if (coldWarning || (chill != null && chill <= -20)) return 0.60;
+  if (snow + daySnow >= 3) return 0.50;
+  if (snow >= 1.5) return 0.40;
+  return 0.25;
+}
 
-      // Check for snow amounts — only add the best (highest) snow amount factor once
-      if (!snowFactorAdded && bestSnowAmount > 0) {
-        if (bestSnowAmount >= THRESHOLDS.heavySnow) {
-          probability += 45;
-          factors.push({ factor: `Heavy snow forecast (${bestSnowAmount}+ inches)`, impact: +45 });
-        } else if (bestSnowAmount >= THRESHOLDS.moderateSnow) {
-          probability += 30;
-          factors.push({ factor: `Moderate snow forecast (${bestSnowAmount} inches)`, impact: +30 });
-        } else if (bestSnowAmount >= THRESHOLDS.lightSnow) {
-          probability += 15;
-          factors.push({ factor: `Light snow forecast (${bestSnowAmount} inches)`, impact: +15 });
-        }
-        snowFactorAdded = true;
-      }
-
-      // Check for ice/freezing rain — only add once
-      if (!iceFactorAdded && (desc.includes('ice') || desc.includes('freezing rain') || desc.includes('sleet'))) {
-        probability += 35;
-        factors.push({ factor: 'Ice/freezing rain in forecast', impact: +35 });
-        iceFactorAdded = true;
-      }
-
-      // Check for general snow mention without amounts — only if no specific snow factor was added
-      if (!snowFactorAdded && (desc.includes('snow') || desc.includes('flurries'))) {
-        if (desc.includes('heavy')) {
-          probability += 25;
-          factors.push({ factor: 'Heavy snow mentioned', impact: +25 });
-        } else if (desc.includes('light') || desc.includes('flurries')) {
-          probability += 5;
-          factors.push({ factor: 'Light snow/flurries possible', impact: +5 });
-        } else {
-          probability += 15;
-          factors.push({ factor: 'Snow in forecast', impact: +15 });
-        }
-        snowFactorAdded = true;
-      }
-    });
-  }
-
-  // Analyze hourly forecast for morning conditions and precipitation timing
-  const hourlyAnalysis = analyzeHourlyForecast(hourlyForecast);
-  if (hourlyAnalysis) {
-    // Morning temperature analysis (buses run 6-7am)
-    if (hourlyAnalysis.morningMinTemp !== null) {
-      // Calculate morning wind chill
-      let morningWindChill = hourlyAnalysis.morningMinTemp;
-      if (hourlyAnalysis.morningMinTemp <= 50 && hourlyAnalysis.morningMaxWind > 3) {
-        morningWindChill = 35.74 + (0.6215 * hourlyAnalysis.morningMinTemp) -
-          (35.75 * Math.pow(hourlyAnalysis.morningMaxWind, 0.16)) +
-          (0.4275 * hourlyAnalysis.morningMinTemp * Math.pow(hourlyAnalysis.morningMaxWind, 0.16));
-        morningWindChill = Math.round(morningWindChill);
-      }
-
-      if (morningWindChill <= THRESHOLDS.extremeCold) {
-        probability += 15;
-        factors.push({ factor: `Extreme cold at bus time (${morningWindChill}°F wind chill)`, impact: +15 });
-      } else if (morningWindChill <= THRESHOLDS.veryCold) {
-        probability += 10;
-        factors.push({ factor: `Very cold at bus time (${morningWindChill}°F wind chill)`, impact: +10 });
-      }
-    }
-
-    // Active precipitation during morning commute
-    if (hourlyAnalysis.morningHasPrecip) {
-      if (hourlyAnalysis.morningPrecipType === 'ice') {
-        probability += 20;
-        factors.push({ factor: 'Ice/freezing rain during morning commute', impact: +20 });
-      } else {
-        probability += 10;
-        factors.push({ factor: 'Snow during morning commute', impact: +10 });
-      }
-    }
-
-    // Precipitation timing adjustments
-    if (hourlyAnalysis.precipTiming === 'overnight') {
-      probability += 15;
-      factors.push({ factor: 'Precipitation mainly overnight (road accumulation)', impact: +15 });
-    } else if (hourlyAnalysis.precipTiming === 'afternoon') {
-      probability -= 10;
-      factors.push({ factor: 'Precipitation mainly afternoon (less morning impact)', impact: -10 });
-    } else if (hourlyAnalysis.precipTiming === 'all-day') {
-      probability += 10;
-      factors.push({ factor: 'Precipitation expected throughout the day', impact: +10 });
-    }
-  }
-
-  // Historical pattern analysis
-  let historicalMatch = null;
-  if (currentConditions && currentConditions.temperature) {
-    const tempF = currentConditions.temperature.fahrenheit;
-    const windMph = currentConditions.windSpeed?.mph || 0;
-    let windChill = tempF;
-    if (tempF <= 50 && windMph > 3) {
-      windChill = 35.74 + (0.6215 * tempF) - (35.75 * Math.pow(windMph, 0.16)) + (0.4275 * tempF * Math.pow(windMph, 0.16));
-      windChill = Math.round(windChill);
-    }
-
-    // Determine snowfall estimate from forecast text
-    let snowEstimate = 0;
-    let weatherType = '';
-    if (forecast && forecast.periods) {
-      const relevantText = forecast.periods.slice(0, 4)
-        .map(p => (p.detailedForecast || p.shortForecast || '').toLowerCase()).join(' ');
-      const snowMatch = relevantText.match(/(\d+)\s*(?:to\s*(\d+))?\s*inch/);
-      if (snowMatch) snowEstimate = snowMatch[2] ? parseInt(snowMatch[2]) : parseInt(snowMatch[1]);
-      if (relevantText.includes('ice') || relevantText.includes('freezing rain')) weatherType = 'ice';
-      else if (relevantText.includes('snow')) weatherType = 'snow';
-      else if (windChill <= 10) weatherType = 'frigid temperature';
-    }
-
-    historicalMatch = getHistoricalPrediction(tempF, windChill, snowEstimate, weatherType);
-
-    if (historicalMatch) {
-      // Blend historical data with threshold-based probability
-      // Weight: 40% historical, 60% threshold-based
-      const historicalProb = historicalMatch.disruptionRate;
-      probability = Math.round((probability * 0.6) + (historicalProb * 0.4));
-      factors.push({
-        factor: `Historical pattern (${historicalMatch.matchCount} similar days: ${historicalMatch.closedCount} closed, ${historicalMatch.delayCount} delayed)`,
-        impact: Math.round(historicalProb * 0.4)
-      });
-    }
-  }
-
-  // Clamp probability to valid range [0, 95]
-  probability = Math.max(0, Math.min(probability, 95));
-
-  // Calculate separate delay and closure probabilities based on historical patterns
-  let delayProbability, closureProbability;
-  if (historicalMatch && historicalMatch.disruptionRate > 0) {
-    // Split the probability based on historical closure vs delay rates
-    const closureRatio = historicalMatch.closureRate / historicalMatch.disruptionRate;
-    const delayRatio = historicalMatch.delayRate / historicalMatch.disruptionRate;
-    closureProbability = Math.max(0, Math.round(probability * closureRatio));
-    delayProbability = Math.max(0, Math.round(probability * delayRatio));
-  } else {
-    // No historical data - use heuristics based on severity
-    // Higher probabilities lean toward closure, lower toward delay
-    // Using 5 tiers to reduce large swings when crossing boundaries
-    if (probability >= 85) {
-      closureProbability = Math.round(probability * 0.65);
-      delayProbability = Math.round(probability * 0.35);
-    } else if (probability >= 70) {
-      closureProbability = Math.round(probability * 0.55);
-      delayProbability = Math.round(probability * 0.45);
-    } else if (probability >= 55) {
-      closureProbability = Math.round(probability * 0.45);
-      delayProbability = Math.round(probability * 0.55);
-    } else if (probability >= 40) {
-      closureProbability = Math.round(probability * 0.35);
-      delayProbability = Math.round(probability * 0.65);
-    } else {
-      closureProbability = Math.round(probability * 0.25);
-      delayProbability = Math.round(probability * 0.75);
-    }
-  }
-
-  // Determine status based on which outcome is more likely
-  let status, recommendation;
+function describeRisk(probability, delayProbability, closureProbability) {
   if (probability >= 70) {
-    status = 'high';
-    recommendation = closureProbability > delayProbability
-      ? 'High likelihood of closure. Monitor local announcements closely.'
-      : 'High likelihood of delay or closure. Monitor local announcements.';
-  } else if (probability >= 40) {
-    status = 'moderate';
-    recommendation = 'Moderate chance of delay. Check school district communications.';
-  } else if (probability >= 15) {
-    status = 'low';
-    recommendation = 'Low chance of delay. Normal schedule expected.';
-  } else {
-    status = 'minimal';
-    recommendation = 'No significant weather concerns. Normal schedule expected.';
+    return {
+      status: 'high',
+      recommendation: closureProbability > delayProbability
+        ? 'High likelihood of closure. Monitor local announcements closely.'
+        : 'High likelihood of delay or closure. Monitor local announcements.'
+    };
+  }
+  if (probability >= 40) {
+    return { status: 'moderate', recommendation: 'Moderate chance of delay. Check school district communications.' };
+  }
+  if (probability >= 15) {
+    return { status: 'low', recommendation: 'Low chance of delay. Normal schedule expected.' };
+  }
+  return { status: 'minimal', recommendation: 'No significant weather concerns. Normal schedule expected.' };
+}
+
+function riskTier(probability) {
+  return describeRisk(probability, 0, 0).status;
+}
+
+// Score one place for one school morning from its features.
+function scoreDisruption(features, { schoolName = null } = {}) {
+  // Combine the factors, strongest first. Each factor's "impact" is what it
+  // adds on top of the ones above it, so the impacts sum to the total.
+  let missChance = 1;
+  let runningTotal = 0;
+  const factors = [];
+  for (const { factor, chance } of collectFactors(features)) {
+    missChance *= (1 - chance);
+    const total = Math.min(MAX_PROBABILITY, Math.round((1 - missChance) * 100));
+    if (total > runningTotal) {
+      factors.push({ factor, impact: total - runningTotal });
+      runningTotal = total;
+    }
+  }
+  const probability = runningTotal;
+
+  // Similar past days refine delay-versus-closure once there are a few of them
+  const historicalMatch = findSimilarDays(
+    features.minTempF,
+    features.minWindChillF,
+    features.snowOvernightIn || 0,
+    describeWeatherType(features),
+    schoolName ? { schoolName, limit: 5 } : {}
+  );
+
+  let closureShare = closureShareFromSeverity(features);
+  const pastDisruptions = historicalMatch ? historicalMatch.closedCount + historicalMatch.delayCount : 0;
+  if (pastDisruptions >= 3) {
+    closureShare = (closureShare + historicalMatch.closedCount / pastDisruptions) / 2;
   }
 
-  // Remove duplicate factors
-  const uniqueFactors = factors.filter((f, i, arr) =>
-    arr.findIndex(x => x.factor === f.factor) === i
-  );
+  const closureProbability = Math.round(probability * closureShare);
+  const delayProbability = probability - closureProbability;
 
   return {
     probability,
     delayProbability,
     closureProbability,
-    status,
-    recommendation,
-    factors: uniqueFactors,
-    historicalMatch,
+    predictedDisruption: probability >= PREDICT_DISRUPTION_AT,
+    ...describeRisk(probability, delayProbability, closureProbability),
+    factors,
+    // Past days are only worth showing when a disruption is on the table
+    historicalMatch: probability >= 15 ? historicalMatch : null
+  };
+}
+
+const DISCLAIMER = 'This is an estimate based on NWS alerts and forecasts for Indiana County and historical patterns. Weather data refreshes every 10 minutes. Always check official school district announcements for actual delay/closure information.';
+
+// County-wide prediction for one school morning (the county seat's forecast,
+// all Indiana County alerts).
+//
+//   options.grid        getGridForecast() result; the worded forecasts are only
+//                       used when it is missing
+//   options.targetDate  school day to forecast (default: the next school morning)
+//   options.now         time the forecast is being made
+function calculateDelayProbability(currentConditions, forecast, hourlyForecast, alerts, options = {}) {
+  const now = options.now || new Date();
+  const targetDate = options.targetDate || getTargetSchoolDay(now);
+
+  const features = buildFeatures({
+    targetDate,
+    grid: options.grid || null,
+    forecast,
+    hourlyForecast,
+    alerts,
+    zones: options.zones || null,
+    current: currentConditions,
+    now
+  });
+
+  return {
+    ...scoreDisruption(features),
+    targetDate,
+    features,
     schools: INDIANA_COUNTY_SCHOOLS,
-    disclaimer: 'This is an estimate based on weather conditions and historical patterns. Weather data refreshes every 10 minutes. Always check official school district announcements for actual delay/closure information.'
+    disclaimer: DISCLAIMER
+  };
+}
+
+// Prediction for every district plus the county-wide summary.
+//
+//   inputs: { current, forecast, hourlyForecast, alerts, grids: { [code]: grid } }
+//   onFile: features saved earlier for this morning, by district code (optional)
+function predictAllDistricts(inputs, { now = new Date(), targetDate = getTargetSchoolDay(now), onFile = {} } = {}) {
+  const grids = inputs.grids || {};
+  const fallbackGrid = grids.IASD || Object.values(grids).find(Boolean) || null;
+
+  const districts = INDIANA_COUNTY_SCHOOLS.map(school => {
+    const features = buildFeatures({
+      targetDate,
+      grid: grids[school.code] || fallbackGrid,
+      forecast: inputs.forecast,
+      hourlyForecast: inputs.hourlyForecast,
+      alerts: inputs.alerts,
+      zones: school.zones,
+      current: inputs.current,
+      onFile: onFile[school.code],
+      now
+    });
+    return { school, features, ...scoreDisruption(features) };
+  });
+
+  // County summary: the average district.
+  const average = key => districts.reduce((sum, d) => sum + d[key], 0) / districts.length;
+  const probability = Math.round(average('probability'));
+  const closureProbability = Math.min(probability, Math.round(average('closureProbability')));
+  const delayProbability = probability - closureProbability;
+
+  // Explain it as the county seat's factors, plus one line for districts whose
+  // weather differs (usually the ridges), so the impacts still sum to the total.
+  const seat = districts[0];
+  const factors = seat.factors.map(f => ({ ...f }));
+  const difference = probability - seat.probability;
+  if (difference !== 0) {
+    const others = districts.filter(d => Math.sign(d.probability - seat.probability) === Math.sign(difference));
+    const names = others.map(d => d.school.shortName).join(', ');
+    const seatFactors = new Set(seat.factors.map(f => f.factor));
+    const reasons = [...new Set(others.flatMap(d => d.factors.map(f => f.factor)))]
+      .filter(factor => !seatFactors.has(factor))
+      .slice(0, 2);
+    factors.push({
+      factor: difference > 0
+        ? `Higher risk in ${names}${reasons.length ? ` (${reasons.join('; ')})` : ''}`
+        : `Lower risk in ${names}`,
+      impact: difference
+    });
+  }
+
+  // True when there was nothing to base a forecast on (NWS unreachable)
+  const noData = !inputs.alertsAvailable && districts.every(d => d.features.source === 'none');
+
+  return {
+    targetDate,
+    noData,
+    county: {
+      probability,
+      delayProbability,
+      closureProbability,
+      predictedDisruption: probability >= PREDICT_DISRUPTION_AT,
+      ...describeRisk(probability, delayProbability, closureProbability),
+      factors,
+      historicalMatch: districts[0].historicalMatch,
+      features: districts[0].features
+    },
+    districts
   };
 }
 
@@ -823,9 +733,19 @@ const SCHOOL_CODE_TO_HISTORICAL_NAME = {
 
 module.exports = {
   calculateDelayProbability,
+  predictAllDistricts,
+  scoreDisruption,
+  riskTier,
   getHistoricalPrediction,
   getSchoolStatuses,
   getSchoolHistoricalPrediction,
+  parseSchoolCast,
+  findSchoolCastEntry,
+  classifyStatusText,
+  isNonWeatherRecord,
   INDIANA_COUNTY_SCHOOLS,
-  SCHOOL_CODE_TO_HISTORICAL_NAME
+  SCHOOL_CODE_TO_HISTORICAL_NAME,
+  NON_WINTER_TEMP_F,
+  PREDICT_DISRUPTION_AT,
+  DISCLAIMER
 };
