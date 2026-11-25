@@ -1,15 +1,24 @@
 name: Daily Weather Logger
 
 on:
-  # Run every weekday at 7:30 AM EST (12:30 UTC)
+  # Every three hours, every day.
+  #
+  # GitHub starts scheduled jobs late - the old single 7:30 AM run was actually
+  # starting between noon and 7 PM Eastern. The logger no longer depends on
+  # when it runs, and repeating it is harmless: today's statuses are recorded
+  # once (from 6 AM Eastern on school days), and the forecast for the next
+  # school day is only rewritten when it changes. Several runs a day means one
+  # lands in the morning to read statuses and one in the evening to capture the
+  # forecast people actually see the night before. Weekend runs keep Monday's
+  # forecast current.
   schedule:
-    - cron: '30 12 * * 1-5'
+    - cron: '17 */3 * * *'
 
   # Also allow manual trigger
   workflow_dispatch:
     inputs:
       force_log:
-        description: 'Force log even if schools are open'
+        description: 'Also log open days outside the winter season'
         required: false
         default: 'false'
         type: boolean
@@ -18,6 +27,11 @@ on:
         required: false
         default: 'false'
         type: boolean
+
+# One run at a time, so two runs never push over each other
+concurrency:
+  group: weather-log
+  cancel-in-progress: false
 
 jobs:
   log-weather:
@@ -68,7 +82,7 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add api/_lib/historicalData.json api/_lib/predictionLog.json
-          git commit -m "Auto-log weather data for $(date +%Y-%m-%d)
+          git commit -m "Auto-log weather data for $(TZ=America/New_York date +%Y-%m-%d)
 
           Automated daily weather and school status logging.
 
