@@ -3391,5 +3391,59 @@
     "snowfall": 0,
     "type": "normal",
     "feelsLike": 41
+  },
+  {
+    "school": "Indiana",
+    "date": "2026-11-27",
+    "status": "open",
+    "temperature": 36,
+    "snowfall": 1,
+    "type": "snow",
+    "feelsLike": 27
+  },
+  {
+    "school": "Homer-Center",
+    "date": "2026-11-27",
+    "status": "open",
+    "temperature": 36,
+    "snowfall": 1,
+    "type": "snow",
+    "feelsLike": 27
+  },
+  {
+    "school": "Marion Center",
+    "date": "2026-11-27",
+    "status": "open",
+    "temperature": 36,
+    "snowfall": 1,
+    "type": "snow",
+    "feelsLike": 27
+  },
+  {
+    "school": "Penns Manor",
+    "date": "2026-11-27",
+    "status": "open",
+    "temperature": 36,
+    "snowfall": 1,
+    "type": "snow",
+    "feelsLike": 27
+  },
+  {
+    "school": "Purchase Line",
+    "date": "2026-11-27",
+    "status": "open",
+    "temperature": 36,
+    "snowfall": 1,
+    "type": "snow",
+    "feelsLike": 27
+  },
+  {
+    "school": "United",
+    "date": "2026-11-27",
+    "status": "open",
+    "temperature": 36,
+    "snowfall": 1,
+    "type": "snow",
+    "feelsLike": 27
   }
 ]
