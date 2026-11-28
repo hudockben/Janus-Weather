@@ -203,16 +203,26 @@ function parseSchoolCast(html) {
 
   if (Object.keys(entries).length === 0) return null;
 
-  let statusDate = null;
-  const header = html.match(/Status for\s+(?:[A-Za-z]+,\s*)?([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/i);
-  if (header) {
-    const month = MONTHS.indexOf(header[1].toLowerCase()) + 1;
-    if (month > 0) {
-      statusDate = `${header[3]}-${String(month).padStart(2, '0')}-${header[2].padStart(2, '0')}`;
-    }
+  return { statusDate: parseStatusDate(html), entries };
+}
+
+// The day the page says its statuses are for, as YYYY-MM-DD, or null when the
+// header cannot be read. Accepts "Status for Monday, November 16, 2026" and
+// close variants ("Statuses as of November 16th 2026", "Status for 11/16/2026").
+function parseStatusDate(html) {
+  const pad = value => String(value).padStart(2, '0');
+
+  const worded = html.match(
+    /Status(?:es)?\s+(?:for|as of)\s+(?:[A-Za-z]+\.?,?\s+)?([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/i);
+  if (worded) {
+    const month = MONTHS.findIndex(name => name.startsWith(worded[1].toLowerCase().slice(0, 3))) + 1;
+    if (month > 0) return `${worded[3]}-${pad(month)}-${pad(worded[2])}`;
   }
 
-  return { statusDate, entries };
+  const numeric = html.match(/Status(?:es)?\s+(?:for|as of)\s+(?:[A-Za-z]+\.?,?\s+)?(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+  if (numeric) return `${numeric[3]}-${pad(numeric[1])}-${pad(numeric[2])}`;
+
+  return null;
 }
 
 // Loose keyword matching for pages without SchoolCast's structure (the radio
@@ -349,10 +359,19 @@ function isNonWeatherRecord(record) {
 }
 
 // History the model is allowed to learn from: district names made consistent,
-// non-weather closures removed.
-const historicalData = rawHistoricalData
-  .map(record => ({ ...record, school: SCHOOL_NAME_FIXES[record.school] || record.school }))
-  .filter(record => !isNonWeatherRecord(record));
+// non-weather closures removed. Built on first use, so that a problem reading
+// the calendar surfaces as an error from the request or run that needs it
+// rather than as a crash while the module loads.
+let cleanedHistory = null;
+
+function getHistory() {
+  if (cleanedHistory === null) {
+    cleanedHistory = rawHistoricalData
+      .map(record => ({ ...record, school: SCHOOL_NAME_FIXES[record.school] || record.school }))
+      .filter(record => !isNonWeatherRecord(record));
+  }
+  return cleanedHistory;
+}
 
 // Categorize a weather event based on snowfall and type
 function categorizeEvent(snow, type) {
@@ -380,7 +399,8 @@ function findSimilarDays(temperature, feelsLike, snowfall, weatherType, { school
   if (!(snowfall > 0) && !type.includes('snow') && !type.includes('ice') && !type.includes('frigid') && !type.includes('cold')) return null;
   if (temperature == null || feelsLike == null) return null;
 
-  const records = schoolName ? historicalData.filter(r => r.school === schoolName) : historicalData;
+  const history = getHistory();
+  const records = schoolName ? history.filter(r => r.school === schoolName) : history;
   if (records.length === 0) return null;
 
   const currentCategory = categorizeEvent(snowfall, weatherType);
@@ -640,6 +660,8 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
     alerts,
     zones: options.zones || null,
     current: currentConditions,
+    onFile: options.onFile,
+    alertsAvailable: options.alertsAvailable !== false,
     now
   });
 
@@ -670,6 +692,7 @@ function predictAllDistricts(inputs, { now = new Date(), targetDate = getTargetS
       zones: school.zones,
       current: inputs.current,
       onFile: onFile[school.code],
+      alertsAvailable: inputs.alertsAvailable !== false,
       now
     });
     return { school, features, ...scoreDisruption(features) };
@@ -740,6 +763,7 @@ module.exports = {
   getSchoolStatuses,
   getSchoolHistoricalPrediction,
   parseSchoolCast,
+  parseStatusDate,
   findSchoolCastEntry,
   classifyStatusText,
   isNonWeatherRecord,

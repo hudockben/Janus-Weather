@@ -437,6 +437,7 @@ function renderSchoolDelay(data) {
       <div class="delay-info">
         <div class="status-label ${data.status}">${statusLabels[data.status] || data.status}</div>
         <div class="recommendation">${data.recommendation}</div>
+        ${data.notice ? `<div class="recommendation">${data.notice}</div>` : ''}
       </div>
     </div>
 

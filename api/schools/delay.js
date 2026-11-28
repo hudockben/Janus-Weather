@@ -77,6 +77,10 @@ module.exports = async (req, res) => {
       recommendation: forecast.noData
         ? 'Weather data from NOAA is unavailable right now, so no prediction can be made. Check back shortly.'
         : county.recommendation,
+      // Set when something the forecast depends on could not be loaded
+      notice: !forecast.noData && !inputs.alertsAvailable
+        ? 'NWS alerts could not be loaded just now. Any alert shown is the last one on file; check weather.gov for current alerts.'
+        : null,
       factors: county.factors,
       historicalMatch: county.historicalMatch,
       // What the model saw for the county seat, for transparency

@@ -22,6 +22,7 @@ const INDIANA_COUNTY_CODE = 'PAC063';
 const REGIONAL_ZONES = ['PAZ021', 'PAZ020'];
 
 const REQUEST_TIMEOUT_MS = 8000;
+const MM_PER_INCH = 25.4;
 
 async function fetchWithRetry(url, retries = 3) {
   for (let i = 0; i < retries; i++) {
@@ -102,20 +103,26 @@ async function getNearestStation(location) {
 // What the station actually recorded between two instants, e.g. this morning's
 // 5-9 AM bus window. Unlike "latest observation", the answer does not depend
 // on what time of day the question is asked.
-async function getObservedWindow(locationKey, startMs, endMs) {
+//
+// With `precipFromMs` (earlier than startMs) the result also carries
+// `precipIn`: the precipitation the station's gauge measured from then until
+// endMs, in inches of water. The station does not report what kind fell, only
+// how much, so this says whether anything fell at all.
+async function getObservedWindow(locationKey, startMs, endMs, { precipFromMs = null } = {}) {
   const location = LOCATIONS[locationKey];
   if (!location) {
     throw new Error(`Unknown location: ${locationKey}`);
   }
 
   const station = await getNearestStation(location);
+  const fromMs = precipFromMs !== null ? Math.min(precipFromMs, startMs) : startMs;
   const url = `${BASE_URL}/stations/${station.stationIdentifier}/observations` +
-    `?start=${new Date(startMs).toISOString()}&end=${new Date(endMs).toISOString()}`;
+    `?start=${new Date(fromMs).toISOString()}&end=${new Date(endMs).toISOString()}`;
   const data = await fetchWithRetry(url);
+  const observations = (data.features || []).map(f => f.properties);
 
-  const readings = (data.features || [])
-    .map(f => f.properties)
-    .filter(o => o.temperature?.value != null)
+  const readings = observations
+    .filter(o => o.temperature?.value != null && Date.parse(o.timestamp) >= startMs)
     .map(o => {
       const tempF = o.temperature.value * 9 / 5 + 32;
       const windMph = o.windSpeed?.value != null ? o.windSpeed.value * 0.621371 : null;
@@ -124,12 +131,28 @@ async function getObservedWindow(locationKey, startMs, endMs) {
 
   if (readings.length === 0) return null;
 
-  return {
+  const result = {
     station: station.name,
     count: readings.length,
     minTempF: Math.round(Math.min(...readings.map(r => r.tempF))),
     minWindChillF: Math.min(...readings.map(r => r.windChillF))
   };
+
+  if (precipFromMs !== null) {
+    // Each report gives the last hour's total; several reports in one clock
+    // hour repeat it, so count the largest per hour.
+    const byHour = new Map();
+    for (const o of observations) {
+      const mm = o.precipitationLastHour?.value;
+      if (mm == null) continue;
+      const hour = Math.floor(Date.parse(o.timestamp) / 3600000);
+      byHour.set(hour, Math.max(byHour.get(hour) || 0, mm));
+    }
+    const totalMm = [...byHour.values()].reduce((sum, mm) => sum + mm, 0);
+    result.precipIn = Math.round((totalMm / MM_PER_INCH) * 100) / 100;
+  }
+
+  return result;
 }
 
 async function getCurrentConditions(locationKey = 'indiana') {
@@ -234,6 +257,22 @@ async function getHourlyForecast(locationKey = 'indiana') {
   };
 }
 
+// Is this feed item an alert that is really in force?
+//
+// The "active" feed also carries test messages, and it keeps a cancellation
+// notice listed until the cancelled alert's original end time. Such a notice
+// looks like the alert itself (same event name, same end time) but says
+// "has been cancelled": response AllClear, VTEC action CAN. An alert that was
+// upgraded to another product (VTEC action UPG) is likewise no longer in force.
+function isAlertInForce(props) {
+  if (props.status && props.status !== 'Actual') return false;
+  if (props.messageType === 'Cancel') return false;
+  if (props.response === 'AllClear') return false;
+  const actions = (props.parameters?.VTEC || []).map(code => code.split('.')[1]);
+  if (actions.length > 0 && actions.every(action => action === 'CAN' || action === 'UPG')) return false;
+  return true;
+}
+
 async function getAlerts() {
   const zones = [...INDIANA_COUNTY_ZONES, INDIANA_COUNTY_CODE, ...REGIONAL_ZONES];
   const alertsUrl = `${BASE_URL}/alerts/active?zone=${zones.join(',')}`;
@@ -243,6 +282,7 @@ async function getAlerts() {
   const westernPACounties = ['indiana', 'allegheny', 'westmoreland', 'armstrong', 'cambria', 'jefferson', 'clearfield'];
 
   const relevantAlerts = (alerts.features || [])
+    .filter(alert => isAlertInForce(alert.properties))
     .map(alert => {
       const props = alert.properties;
       const ugc = props.geocode?.UGC || [];
@@ -286,7 +326,6 @@ async function getAlerts() {
 // numbers back out of the worded forecast, where "1 to 2 inches" of rain looks
 // the same as "1 to 2 inches" of snow.
 
-const MM_PER_INCH = 25.4;
 const GRID_FIELDS = {
   snowfallAmount: mm => mm / MM_PER_INCH,          // inches
   iceAccumulation: mm => mm / MM_PER_INCH,         // inches
@@ -372,6 +411,7 @@ module.exports = {
   getGridForecast,
   getObservedWindow,
   getAlerts,
+  isAlertInForce,
   getLocations,
   parseValidTime,
   calculateWindChill,

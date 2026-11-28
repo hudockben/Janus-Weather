@@ -56,7 +56,6 @@ jobs:
 
       - name: Run weather logger
         id: logger
-        continue-on-error: true
         run: |
           ARGS=""
           if [[ "${{ github.event.inputs.force_log }}" == "true" ]]; then
@@ -65,7 +64,18 @@ jobs:
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
             ARGS="$ARGS --dry-run"
           fi
+
+          # Exit 1 = finished, with problems worth a look (a source was down, a
+          # status could not be read): keep going and commit what was recorded.
+          # Exit 2 = could not run at all: nothing was written; fail the run below.
+          set +e
           node scripts/daily-weather-log.js $ARGS
+          code=$?
+          set -e
+          echo "exit_code=$code" >> $GITHUB_OUTPUT
+          if [ "$code" -eq 1 ]; then
+            echo "::warning::The weather logger finished with problems. See the 'Errors' list in this step's log."
+          fi
 
       - name: Check for changes
         id: check_changes
@@ -88,3 +98,11 @@ jobs:
 
           https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           git push
+
+      # A logger that cannot run at all (unreadable data or calendar file, an
+      # unexpected error) must not look like a healthy run.
+      - name: Fail if the logger could not run
+        if: steps.logger.outputs.exit_code != '0' && steps.logger.outputs.exit_code != '1'
+        run: |
+          echo "::error::The weather logger could not run (exit ${{ steps.logger.outputs.exit_code }}). Nothing was recorded."
+          exit 1

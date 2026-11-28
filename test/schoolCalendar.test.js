@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  getFixedHoliday, getNonSchoolReason, isSchoolDay, getTargetSchoolDay, isWinterSeason
+  getFixedHoliday, getNonSchoolReason, isSchoolDay, getTargetSchoolDay, isWinterSeason, loadNonWeatherClosures
 } = require('../api/_lib/schoolCalendar');
 
 test('Thanksgiving is the fourth Thursday of November, plus the Friday', () => {
@@ -17,6 +17,48 @@ test('winter break runs Dec 24 through Jan 1', () => {
   assert.equal(getFixedHoliday('2026-12-24'), 'Winter break');
   assert.equal(getFixedHoliday('2027-01-01'), 'Winter break');
   assert.equal(getFixedHoliday('2027-01-04'), null);
+});
+
+test('holidays every district shares are built in', () => {
+  // Easter moves: 2026-04-05, 2027-03-28, 2030-04-21
+  assert.equal(getFixedHoliday('2026-04-03'), 'Good Friday');
+  assert.equal(getFixedHoliday('2026-04-06'), 'Easter Monday');
+  assert.equal(getFixedHoliday('2027-03-26'), 'Good Friday');
+  assert.equal(getFixedHoliday('2027-03-29'), 'Easter Monday');
+  assert.equal(getFixedHoliday('2030-04-19'), 'Good Friday');
+  assert.equal(getFixedHoliday('2027-03-25'), null);
+
+  assert.equal(getFixedHoliday('2026-05-25'), 'Memorial Day');
+  assert.equal(getFixedHoliday('2027-05-31'), 'Memorial Day');
+  assert.equal(getFixedHoliday('2027-05-24'), null);
+  assert.equal(getFixedHoliday('2026-09-07'), 'Labor Day');
+  assert.equal(getFixedHoliday('2027-09-06'), 'Labor Day');
+  assert.equal(getFixedHoliday('2027-09-13'), null);
+});
+
+test('mid-June to mid-August is summer break', () => {
+  assert.equal(getFixedHoliday('2027-06-14'), null);
+  assert.equal(getFixedHoliday('2027-06-15'), 'Summer break');
+  assert.equal(getFixedHoliday('2027-07-20'), 'Summer break');
+  assert.equal(getFixedHoliday('2027-08-15'), 'Summer break');
+  assert.equal(getFixedHoliday('2027-08-16'), null);
+  // A forecast made the last evening before the break looks to mid-August
+  assert.equal(getTargetSchoolDay(new Date('2027-06-14T23:00:00Z')), '2027-08-16');
+});
+
+test('days that vary by district are not assumed', () => {
+  assert.equal(getFixedHoliday('2027-01-18'), null); // MLK Day
+  assert.equal(getFixedHoliday('2027-02-15'), null); // Presidents' Day
+});
+
+test('the shipped calendar file is well formed', () => {
+  const closures = loadNonWeatherClosures();
+  assert.ok(Array.isArray(closures) && closures.length > 0);
+  for (const entry of closures) {
+    assert.match(entry.date, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(entry.schools === 'all' || typeof entry.schools === 'string' || Array.isArray(entry.schools));
+    assert.equal(typeof entry.reason, 'string');
+  }
 });
 
 test('weekends and listed closures are not school days', () => {

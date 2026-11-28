@@ -46,17 +46,44 @@ function accumulate(series, window) {
   return { total, coverage: coveredMs / (window[1] - window[0]) };
 }
 
-// A total for a window that is partly in the past.
-//
-// The grid drops hours as they pass, so by early morning it only reports the
-// snow still to come - the remaining total shrinks even though the storm did
-// exactly what was forecast. The hours already behind us are taken, pro-rated,
-// from the forecast that was on file for this morning.
-function withEarlierHours(remaining, onFileTotal, windowHasStarted) {
-  if (!remaining) return windowHasStarted && onFileTotal != null ? onFileTotal : null;
-  if (!windowHasStarted || onFileTotal == null || remaining.coverage >= 0.99) return remaining.total;
-  return remaining.total + onFileTotal * (1 - remaining.coverage);
+// The parts of a per-period series that fall inside a window, as
+// { start, end, value } with each straddling period cut to the window and its
+// amount scaled to match.
+function clipToWindow(series, window) {
+  const pieces = [];
+  for (const point of series || []) {
+    // Saved blocks are stored compactly as [start, end, value]
+    const { start, end, value } = Array.isArray(point)
+      ? { start: point[0], end: point[1], value: point[2] }
+      : point;
+    const overlap = overlapMs(start, end, window);
+    if (overlap <= 0 || value == null) continue;
+    pieces.push({
+      start: Math.max(start, window[0]),
+      end: Math.min(end, window[1]),
+      value: value * (overlap / (end - start))
+    });
+  }
+  return pieces.sort((x, y) => x.start - y.start);
 }
+
+// Per-period amounts for a window that may be partly in the past.
+//
+// The grid drops hours as they pass (it keeps about six), so by early morning
+// it only reports the snow still to come: the total shrinks although the storm
+// did exactly what was forecast. The hours the grid no longer covers are taken
+// from the periods saved with the forecast on file - those hours only, so
+// nothing is counted twice.
+function blocksForWindow(series, window, savedBlocks, nowMs) {
+  const live = clipToWindow(series, window);
+  if (!savedBlocks || savedBlocks.length === 0 || nowMs <= window[0]) return live;
+
+  const liveFrom = live.length > 0 ? live[0].start : window[1];
+  if (liveFrom <= window[0]) return live;
+  return [...clipToWindow(savedBlocks, [window[0], liveFrom]), ...live];
+}
+
+const sumBlocks = blocks => (blocks.length > 0 ? blocks.reduce((sum, block) => sum + block.value, 0) : null);
 
 function minimumOver(series, window) {
   let min = null;
@@ -136,26 +163,76 @@ function selectAlerts(alerts, windows, zones) {
     // Squalls last under an hour; one that is over before buses run is history
     if (entry.kind === 'squall' && timing !== 'bus-time') continue;
 
-    const selected = {
+    keepStrongest(strongestByKind, {
       event: alert.event,
       kind: entry.kind,
       level: entry.level,
       timing,
-      weight: entry.weight * ALERT_TIMING[timing].factor
-    };
-    const current = strongestByKind.get(entry.kind);
-    if (!current || selected.weight > current.weight) {
-      strongestByKind.set(entry.kind, selected);
-    }
+      weight: entry.weight * ALERT_TIMING[timing].factor,
+      ends: Number.isFinite(parsedEnd) ? new Date(parsedEnd).toISOString() : null
+    });
   }
 
+  return rankAlerts(strongestByKind);
+}
+
+function keepStrongest(strongestByKind, alert) {
+  const current = strongestByKind.get(alert.kind);
+  if (!current || alert.weight > current.weight) {
+    strongestByKind.set(alert.kind, alert);
+  }
+}
+
+function rankAlerts(strongestByKind) {
   // A watch is the early heads-up for a warning or advisory; once one of those
   // is out for the same morning the watch adds nothing.
   if (strongestByKind.has('storm') || strongestByKind.has('cold')) {
     strongestByKind.delete('watch');
   }
-
   return [...strongestByKind.values()].sort((a, b) => b.weight - a.weight);
+}
+
+// Alerts saved with the forecast on file, as { event, timing, ends }. The log
+// stores them compactly: labels like "Winter Weather Advisory@bus-time" plus a
+// parallel list of end times.
+function savedAlerts(onFile) {
+  return (onFile?.alerts || []).map((alert, i) => {
+    if (typeof alert !== 'string') return alert;
+    const [event, timing] = alert.split('@');
+    return { event, timing, ends: onFile.alertEnds?.[i] ?? null };
+  });
+}
+
+// Add back alerts that were on file for this morning and are no longer in the
+// live list.
+//
+// NWS removes an alert from its active feed the minute its end time passes.
+// An advisory that ran until 1 AM, or until 7 AM, therefore disappears while
+// it still explains the morning's roads. One whose scheduled end has passed
+// ran its course and still counts; one that vanished before its end time was
+// cancelled and does not. With `feedDown` (the feed could not be read at all)
+// every saved alert is kept, since there is no newer information.
+function withSavedAlerts(liveAlerts, onFile, nowMs, { feedDown = false } = {}) {
+  const strongestByKind = new Map(liveAlerts.map(alert => [alert.kind, alert]));
+
+  for (const saved of savedAlerts(onFile)) {
+    const end = Date.parse(saved.ends);
+    const ranItsCourse = Number.isFinite(end) && end <= nowMs;
+    if (!feedDown && !ranItsCourse) continue;
+
+    const entry = classifyAlert(saved.event);
+    if (!entry || !ALERT_TIMING[saved.timing]) continue;
+    keepStrongest(strongestByKind, {
+      event: saved.event,
+      kind: entry.kind,
+      level: entry.level,
+      timing: saved.timing,
+      weight: entry.weight * ALERT_TIMING[saved.timing].factor,
+      ends: saved.ends ?? null
+    });
+  }
+
+  return rankAlerts(strongestByKind);
 }
 
 // --- Precipitation type at bus time -------------------------------------------
@@ -293,9 +370,14 @@ const round = (value, places) => {
 //   alerts      getAlerts().alerts
 //   zones       NWS zone codes covering the place, e.g. ['PAZ077']
 //   current     getCurrentConditions() result, used once the morning is underway
-//   onFile      features saved earlier for this same morning, if any; they
-//               supply the hours the grid has already dropped
-function buildFeatures({ targetDate, grid, forecast, hourlyForecast, alerts, zones, current, onFile, now = new Date() }) {
+//   onFile      features saved earlier for this same morning, if any. They
+//               supply the hours the grid has dropped and the alerts that have
+//               since run their course.
+//   alertsAvailable  false when the alert feed could not be read
+function buildFeatures({
+  targetDate, grid, forecast, hourlyForecast, alerts, zones, current, onFile,
+  alertsAvailable = true, now = new Date()
+}) {
   const windows = getWindows(targetDate);
   const nowMs = new Date(now).getTime();
 
@@ -309,39 +391,39 @@ function buildFeatures({ targetDate, grid, forecast, hourlyForecast, alerts, zon
     minTempF: null,
     minWindChillF: null,
     commutePrecip: null,
-    alerts: selectAlerts(alerts, windows, zones)
+    alerts: withSavedAlerts(selectAlerts(alerts, windows, zones), onFile, nowMs, { feedDown: !alertsAvailable }),
+    alertsAvailable,
+    snowBlocks: [],
+    iceBlocks: []
   };
 
   const series = grid?.series;
   if (series) {
-    features.snowOvernightIn = accumulate(series.snowfallAmount, windows.overnight)?.total ?? null;
     features.snowSchoolDayIn = accumulate(series.snowfallAmount, windows.schoolDay)?.total ?? null;
-    features.iceIn = accumulate(series.iceAccumulation, windows.ice)?.total ?? null;
     features.minTempF = minimumOver(series.temperature, windows.coldCheck);
     features.minWindChillF = minimumOver(series.windChill, windows.coldCheck) ??
       minimumOver(series.apparentTemperature, windows.coldCheck);
     features.commutePrecip = commutePrecipFromGrid(series.weather, windows.coldCheck);
-    if (features.snowOvernightIn !== null || features.minWindChillF !== null) features.source = 'grid';
   }
 
-  // Hours that have already passed are missing from the grid; fill them from
-  // the forecast on file so the morning-of numbers don't fade as the snow falls.
-  if (onFile) {
-    features.snowOvernightIn = withEarlierHours(
-      series ? accumulate(series.snowfallAmount, windows.overnight) : null,
-      onFile.snowOvernightIn, nowMs > windows.overnight[0]);
-    features.iceIn = withEarlierHours(
-      series ? accumulate(series.iceAccumulation, windows.ice) : null,
-      onFile.iceIn, nowMs > windows.ice[0]);
-    if (nowMs > windows.coldCheck[0]) {
-      for (const key of ['minTempF', 'minWindChillF']) {
-        if (onFile[key] != null) features[key] = features[key] === null ? onFile[key] : Math.min(features[key], onFile[key]);
-      }
-      features.commutePrecip = features.commutePrecip ?? onFile.commutePrecip ?? null;
+  // Snow and ice: what the grid still shows, plus the hours it has dropped
+  features.snowBlocks = blocksForWindow(series?.snowfallAmount, windows.overnight, onFile?.snowBlocks, nowMs);
+  features.iceBlocks = blocksForWindow(series?.iceAccumulation, windows.ice, onFile?.iceBlocks, nowMs);
+  features.snowOvernightIn = sumBlocks(features.snowBlocks);
+  features.iceIn = sumBlocks(features.iceBlocks);
+
+  if (series && (features.snowOvernightIn !== null || features.minWindChillF !== null)) {
+    features.source = 'grid';
+  }
+
+  // With the grid unreachable on the morning itself, the forecast on file is
+  // the best information left. (When the grid does answer, its own numbers
+  // stand: an older, colder forecast must not override a newer one.)
+  if (onFile && !series && nowMs > windows.overnight[0]) {
+    for (const key of ['snowOvernightIn', 'snowSchoolDayIn', 'iceIn', 'minTempF', 'minWindChillF', 'commutePrecip']) {
+      if (features[key] === null && onFile[key] != null) features[key] = onFile[key];
     }
-    if (features.source === 'none' && (features.snowOvernightIn !== null || features.minWindChillF !== null)) {
-      features.source = 'on-file';
-    }
+    if (features.snowOvernightIn !== null || features.minWindChillF !== null) features.source = 'on-file';
   }
 
   // The grid only carries snow and ice amounts about three days out, and can be
@@ -377,10 +459,30 @@ function buildFeatures({ targetDate, grid, forecast, hourlyForecast, alerts, zon
   return features;
 }
 
+// The form a forecast's features take in the prediction log.
+function compactFeatures(features) {
+  const compactBlocks = blocks => blocks.map(b => [b.start, b.end, round(b.value, 3)]);
+  return {
+    source: features.source,
+    snowOvernightIn: features.snowOvernightIn,
+    snowSchoolDayIn: features.snowSchoolDayIn,
+    iceIn: features.iceIn,
+    minTempF: features.minTempF,
+    minWindChillF: features.minWindChillF,
+    commutePrecip: features.commutePrecip,
+    alerts: features.alerts.map(alert => `${alert.event}@${alert.timing}`),
+    alertEnds: features.alerts.map(alert => alert.ends ?? null),
+    snowBlocks: compactBlocks(features.snowBlocks),
+    iceBlocks: compactBlocks(features.iceBlocks)
+  };
+}
+
 module.exports = {
   buildFeatures,
+  compactFeatures,
   getWindows,
   selectAlerts,
+  withSavedAlerts,
   classifyAlert,
   parseSnowInches,
   parseIceInches,

@@ -14,12 +14,30 @@ const NON_WEATHER_CLOSURES_PATH = path.join(__dirname, 'nonWeatherClosures.json'
 // vary by district) live in nonWeatherClosures.json.
 let closuresCache = null;
 
+// A missing file means no listed days off. A file that is there but cannot be
+// parsed is an error: quietly treating it as empty would switch off every
+// listed day off and let holidays be recorded as school days.
 function loadNonWeatherClosures() {
   if (closuresCache === null) {
+    let text = null;
     try {
-      closuresCache = JSON.parse(fs.readFileSync(NON_WEATHER_CLOSURES_PATH, 'utf8'));
+      text = fs.readFileSync(NON_WEATHER_CLOSURES_PATH, 'utf8');
     } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    if (text === null) {
       closuresCache = [];
+    } else {
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (error) {
+        throw new Error(`nonWeatherClosures.json is not valid JSON (${error.message}). Fix the file; no days off can be read until then.`);
+      }
+      if (!Array.isArray(parsed)) {
+        throw new Error('nonWeatherClosures.json must be a list of { date, schools, reason } entries.');
+      }
+      closuresCache = parsed;
     }
   }
   return closuresCache;
@@ -37,9 +55,32 @@ function getNonWeatherClosure(dateStr, schoolName) {
   });
 }
 
-// Breaks that every district shares, so they don't have to be listed by hand.
+// Easter Sunday for a year, as [month, day] (Gregorian computus).
+function easterSunday(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return [month, day];
+}
+
+// Days off that every district shares, so they don't have to be listed by
+// hand. Anything that varies by district (in-service days, MLK Day and
+// Presidents' Day, which some districts keep as snow make-up days, the rest of
+// spring break) belongs in nonWeatherClosures.json.
 function getFixedHoliday(dateStr) {
   const [year, month, day] = dateStr.split('-').map(Number);
+  const pad = value => String(value).padStart(2, '0');
 
   if (month === 11) {
     // Thanksgiving is the fourth Thursday of November
@@ -50,6 +91,18 @@ function getFixedHoliday(dateStr) {
   }
 
   if ((month === 12 && day >= 24) || (month === 1 && day === 1)) return 'Winter break';
+
+  const [easterMonth, easterDay] = easterSunday(year);
+  const easter = `${year}-${pad(easterMonth)}-${pad(easterDay)}`;
+  if (dateStr === addDays(easter, -2)) return 'Good Friday';
+  if (dateStr === addDays(easter, 1)) return 'Easter Monday';
+
+  // Memorial Day: last Monday of May. Labor Day: first Monday of September.
+  if (month === 5 && day >= 25 && dayOfWeek(dateStr) === 1) return 'Memorial Day';
+  if (month === 9 && day <= 7 && dayOfWeek(dateStr) === 1) return 'Labor Day';
+
+  // No district is in session between mid-June and mid-August
+  if ((month === 6 && day >= 15) || month === 7 || (month === 8 && day <= 15)) return 'Summer break';
 
   return null;
 }
@@ -80,7 +133,8 @@ function isSchoolDay(dateStr, schoolName) {
 function getTargetSchoolDay(now = new Date(), { cutoffHour = 9 } = {}) {
   const eastern = easternParts(now);
   let date = eastern.hour < cutoffHour ? eastern.dateStr : addDays(eastern.dateStr, 1);
-  for (let i = 0; i < 21 && !isSchoolDay(date); i++) {
+  // (bounded, but long enough to step over summer break)
+  for (let i = 0; i < 120 && !isSchoolDay(date); i++) {
     date = addDays(date, 1);
   }
   return date;
