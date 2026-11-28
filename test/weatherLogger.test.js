@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  logWeatherData, loadJson, readTodayStatus, classifyCause, resolvePredictions, saveForecast, tally,
+  logWeatherData, loadJson, readTodayStatus, classifyCause, closurePattern, resolvePredictions, saveForecast, tally,
   getScorableEntries, getPredictionAccuracy, MODEL_VERSION
 } = require('../api/_lib/weatherLogger');
 const { easternToMs, addDays } = require('../api/_lib/easternTime');
@@ -67,12 +67,32 @@ test('a status is only read for the day the page says it is for', () => {
   assert.match(movedOn.skip, /already shows statuses for 2030-01-16/);
 });
 
-test('a delay or closure on a page whose date cannot be read is not taken as today\'s', () => {
+test('nothing is read from a page whose date cannot be read', () => {
   const undatedClosure = readTodayStatus(posted('closed', null), TUESDAY, 8);
   assert.match(undatedClosure.skip, /date could not be read/);
   assert.equal(undatedClosure.problem, true);
-  // "Open" needs no date: nothing posted is nothing posted
-  assert.deepEqual(readTodayStatus(posted('open', null), TUESDAY, 8), { status: 'open' });
+  // "Open" is refused too: on an undated page it may be tomorrow's status, or
+  // what is left once this morning's delay has been cleared
+  const undatedOpen = readTodayStatus(posted('open', null), TUESDAY, 16);
+  assert.match(undatedOpen.skip, /date could not be read/);
+  assert.equal(undatedOpen.problem, true);
+});
+
+test('a delay day is not turned into an open day by an undated page', async () => {
+  const store = memoryStore();
+  await fileStormForecast(store);
+
+  // The page's date header has become unreadable. 7:17 AM: delays showing.
+  const morning = await run(store, '2030-01-15T12:17:00Z', allSchools(posted('2-hour delay', null)));
+  assert.equal(store.state.history.length, 0);
+  assert.equal(morning.errors.filter(e => e.type === 'status_not_recorded').length, 6);
+
+  // 4:17 PM: the delays have been cleared and the page shows Open
+  const afternoon = await run(store, '2030-01-15T21:17:00Z', allSchools(posted('open', null)));
+  assert.equal(store.state.history.length, 0);
+  assert.equal(afternoon.errors.filter(e => e.type === 'status_not_recorded').length, 6);
+  // The storm forecast is left unscored rather than marked a false alarm
+  assert.ok(store.state.predictions.filter(e => e.date === TUESDAY).every(e => e.actualStatus === null));
 });
 
 test('statuses are not read before districts have posted, or from unreliable sources', () => {
@@ -85,30 +105,60 @@ test('statuses are not read before districts have posted, or from unreliable sou
 // ---------- weather or not ----------
 
 test('a closure is set aside as non-weather only on outside facts', () => {
-  const morning = { temperature: 39, feelsLike: 35, alerts: [] };
+  const mild = { temperature: 39, feelsLike: 35, observed: true, precipIn: 0, minVisibilityMi: 10, countyAlerts: [] };
 
-  assert.equal(classifyCause('open', morning), null);
+  assert.equal(classifyCause('open', mild, 'county-wide'), null);
   // Too warm for winter weather, whatever else is going on
-  assert.equal(classifyCause('closed', { ...morning, temperature: 77, feelsLike: 77 }), 'non-winter');
+  assert.equal(classifyCause('closed', { ...mild, temperature: 77, feelsLike: 77 }), 'non-winter');
 
-  // All six districts closed, no alert, above freezing: a day off
-  assert.equal(classifyCause('closed', morning, true), 'non-winter');
-  assert.equal(classifyCause('flexible instruction day', morning, true), 'non-winter');
-  // ...but not at or below freezing, and not under a winter alert
-  assert.equal(classifyCause('closed', { ...morning, temperature: 30 }, true), null);
-  assert.equal(classifyCause('closed', { ...morning, alerts: ['Winter Weather Advisory'] }, true), null);
+  // All six districts closed, no alert anywhere in the county, above freezing: a day off
+  assert.equal(classifyCause('closed', mild, 'county-wide'), 'non-winter');
+  assert.equal(classifyCause('flexible instruction day', mild, 'county-wide'), 'non-winter');
+  // One district closed or delayed while the others are open, above freezing: a local problem
+  assert.equal(classifyCause('closed', mild, 'isolated'), 'non-winter');
+  assert.equal(classifyCause('delay', mild, 'isolated'), 'non-winter');
+  // Several districts disrupted is what weather looks like: scored, even above freezing
+  assert.equal(classifyCause('closed', mild, null), null);
+  assert.equal(classifyCause('delay', mild), null);
+  // A winter alert for any part of the county: scored
+  assert.equal(classifyCause('closed', { ...mild, countyAlerts: ['Winter Weather Advisory'] }, 'county-wide'), null);
+  // A forecast temperature standing in for the airport's reading proves nothing: scored
+  assert.equal(classifyCause('closed', { ...mild, observed: false }, 'county-wide'), null);
+  // Rain at 39 F is still no winter weather; at 33 F something falling may be wet snow
+  assert.equal(classifyCause('closed', { ...mild, precipIn: 0.3, minVisibilityMi: 2 }, 'county-wide'), 'non-winter');
+  assert.equal(classifyCause('closed', { ...mild, temperature: 33, feelsLike: 27, precipIn: 0.12 }, 'county-wide'), null);
+  assert.equal(classifyCause('closed', { ...mild, temperature: 33, feelsLike: 27 }, 'county-wide'), 'non-winter'); // clear and dry
 
-  // Below freezing it takes more: a dry gauge since the evening before and no bitter cold
-  const coldAndDry = { temperature: 19, feelsLike: 12, precipIn: 0, alerts: [] };
-  assert.equal(classifyCause('closed', coldAndDry, true), 'non-winter');             // e.g. an unlisted holiday in January
-  assert.equal(classifyCause('closed', { ...coldAndDry, precipIn: 0.04 }, true), null);   // something fell
-  assert.equal(classifyCause('closed', { ...coldAndDry, feelsLike: -12 }, true), null);   // bitter cold
-  assert.equal(classifyCause('closed', { ...coldAndDry, precipIn: null }, true), null);   // gauge unknown: assume weather
-  assert.equal(classifyCause('closed', coldAndDry, false), null);                         // not county-wide
+  // At or below freezing it takes a clear, dry night that was not bitterly cold
+  const coldAndClear = { temperature: 19, feelsLike: 12, observed: true, precipIn: 0, minVisibilityMi: 10, countyAlerts: [] };
+  assert.equal(classifyCause('closed', coldAndClear, 'county-wide'), 'non-winter');   // e.g. an unlisted holiday in January
+  // One district alone on a freezing morning may be its own back roads: scored
+  assert.equal(classifyCause('closed', coldAndClear, 'isolated'), null);
+  assert.equal(classifyCause('delay', coldAndClear, 'isolated'), null);
+  assert.equal(classifyCause('closed', { ...coldAndClear, precipIn: 0.04 }, 'county-wide'), null);        // something fell
+  // The airport's gauge reads zero in snow, but visibility drops: that is snow
+  assert.equal(classifyCause('closed', { ...coldAndClear, minVisibilityMi: 0.8 }, 'county-wide'), null);
+  assert.equal(classifyCause('closed', { ...coldAndClear, minVisibilityMi: null }, 'county-wide'), null); // not reported: assume weather
+  assert.equal(classifyCause('closed', { ...coldAndClear, precipIn: null }, 'county-wide'), null);
+  assert.equal(classifyCause('closed', { ...coldAndClear, feelsLike: -12 }, 'county-wide'), null);        // bitter cold
+  assert.equal(classifyCause('closed', coldAndClear), null);                                              // no pattern: scored
+});
 
-  // One district closing on its own stays a weather outcome the model must answer for
-  assert.equal(classifyCause('closed', morning, false), null);
-  assert.equal(classifyCause('delay', morning, false), null);
+test('what the districts did together: all closed, one alone, or neither', () => {
+  const day = statuses => statuses.map(status => ({ status, noSchool: null }));
+  assert.equal(closurePattern(day(['closed', 'closed', 'flexible instruction day', 'closed', 'closed', 'closed'])), 'county-wide');
+  assert.equal(closurePattern(day(['closed', 'closed', 'delay', 'closed', 'closed', 'closed'])), null);
+  assert.equal(closurePattern(day(['closed', 'open', 'open', 'open', 'open', 'open'])), 'isolated');
+  assert.equal(closurePattern(day(['open', 'open', 'delay', 'open', 'open', 'open'])), 'isolated');
+  assert.equal(closurePattern(day(['closed', 'delay', 'open', 'open', 'open', 'open'])), null);
+  assert.equal(closurePattern(day(['open', 'open', 'open', 'open', 'open', 'open'])), null);
+  // A district that could not be read leaves the picture incomplete
+  assert.equal(closurePattern(day(['closed', null, 'open', 'open', 'open', 'open'])), null);
+  assert.equal(closurePattern(day(['closed', 'closed', 'closed', 'closed', 'closed', null])), null);
+  // A district on a listed day off is left out of the count
+  const inService = { status: null, noSchool: 'Teacher inservice day' };
+  assert.equal(closurePattern([inService, ...day(['closed', 'closed', 'closed', 'closed', 'closed'])]), 'county-wide');
+  assert.equal(closurePattern([inService, ...day(['closed', 'open', 'open', 'open', 'open'])]), 'isolated');
 });
 
 test('a storm the forecast missed is scored as a miss, not waved away as non-weather', async () => {
@@ -447,6 +497,7 @@ test('a delay cleared from the page later in the day stays a delay', async () =>
   await fileStormForecast(store);
 
   await run(store, '2030-01-15T12:17:00Z', allSchools(posted('2-hour delay', TUESDAY)));
+  await run(store, '2030-01-15T15:17:00Z', allSchools(posted('2-hour delay', TUESDAY)));
   const before = JSON.stringify(store.state);
   const result = await run(store, '2030-01-15T18:17:00Z', allSchools(posted('open', TUESDAY)));
 
@@ -494,6 +545,18 @@ test('the morning low is completed once the whole 5-9 AM record is in', async ()
   assert.equal(JSON.stringify(store.state.history), before);
 });
 
+test('the "partial" note is removed once the morning is complete, even when the low did not change', async () => {
+  const store = memoryStore();
+  await run(store, '2030-01-15T12:17:00Z', allSchools(posted('open', MONDAY)), { minTempF: 27, minWindChillF: 16 });
+  assert.ok(store.state.history.every(r => r.obs === 'partial'));
+
+  const result = await run(store, '2030-01-15T15:17:00Z', allSchools(posted('open', MONDAY)), { minTempF: 27, minWindChillF: 16 });
+  assert.equal(result.updated.length, 6);
+  assert.deepEqual(result.updated[0].changes, ['morning record complete']);
+  // What is stored (not just what was in memory) no longer carries the note
+  assert.ok(store.state.history.every(r => r.temperature === 27 && r.feelsLike === 16 && !('obs' in r)));
+});
+
 test('a forecast low used because the station had not reported is replaced by the real one', async () => {
   const store = memoryStore();
   await fileStormForecast(store); // on file: 21 F / wind chill 11 F
@@ -518,6 +581,67 @@ test('a day off that is not in the calendar is recognised once all six districts
   assert.equal(store.state.history.filter(r => r.cause === 'non-winter' && r.type === 'non-weather').length, 6);
 });
 
+test('a snow day the airport gauge did not register is still a snow day', async () => {
+  // As on 2024-01-16: all six closed, 16 F, wind chill 3 F, gauge 0.00 (it does
+  // not register snow), visibility under a mile, advisory only for the ridges.
+  const store = memoryStore();
+  const quiet = makeInputs({ grid: makeGrid(TUESDAY, { snow: [0, 0, 0, 0], windChill: [5, 4, 3, 4, 6], temperature: [17, 16, 16, 17, 18] }) });
+  await logWeatherData({ now: new Date('2030-01-15T01:30:00Z'), store, sources: stagedSources({ inputs: quiet, statuses: allSchools(posted('open', MONDAY)), morning: null }) });
+
+  const snowyMorning = { minTempF: 16, minWindChillF: 3, precipIn: 0, minVisibilityMi: 0.8 };
+  const ridgeAdvisory = [makeAlert('Winter Weather Advisory', MONDAY, 22, 36, ['PAZ078'])];
+
+  // With the ridge-zone advisory (it covers part of the county, so it counts for all of it)
+  const withAdvisory = await logWeatherData({
+    now: new Date('2030-01-15T15:17:00Z'), store,
+    sources: stagedSources({ inputs: { ...quietTomorrow(), alerts: ridgeAdvisory }, statuses: allSchools(posted('closed', TUESDAY)), morning: snowyMorning })
+  });
+  assert.equal(withAdvisory.setAside.length, 0);
+  assert.equal(store.state.history.filter(r => r.cause).length, 0);
+  assert.equal(store.state.predictions.filter(e => e.date === TUESDAY && e.correct === false).length, 6);
+
+  // And with no alert at all: the visibility alone says something was falling
+  const noAlertStore = memoryStore();
+  await logWeatherData({ now: new Date('2030-01-15T01:30:00Z'), store: noAlertStore, sources: stagedSources({ inputs: quiet, statuses: allSchools(posted('open', MONDAY)), morning: null }) });
+  await run(noAlertStore, '2030-01-15T15:17:00Z', allSchools(posted('closed', TUESDAY)), snowyMorning);
+  assert.equal(noAlertStore.state.history.filter(r => r.cause).length, 0);
+  assert.equal(noAlertStore.state.predictions.filter(e => e.date === TUESDAY && e.correct === false).length, 6);
+});
+
+test('an unlisted day off on a clear, cold morning is set aside and reported', async () => {
+  const store = memoryStore();
+  const clearMorning = { minTempF: 19, minWindChillF: 11, precipIn: 0, minVisibilityMi: 10 };
+  const result = await run(store, '2030-01-15T15:17:00Z', allSchools(posted('closed', TUESDAY)), clearMorning);
+
+  assert.equal(store.state.history.filter(r => r.cause === 'non-winter' && r.type === 'non-weather').length, 6);
+  assert.equal(result.setAside.length, 6);
+  assert.deepEqual(result.setAside[0], { school: 'Indiana', status: 'closed' });
+});
+
+test('one district closing on a mild morning is a local problem, not a missed forecast', async () => {
+  const store = memoryStore();
+  const quiet = makeInputs({ grid: makeGrid(TUESDAY, { snow: [0, 0, 0, 0], windChill: [38, 38, 38, 38, 39], temperature: [40, 40, 40, 40, 41] }) });
+  await logWeatherData({ now: new Date('2030-01-15T01:30:00Z'), store, sources: stagedSources({ inputs: quiet, statuses: allSchools(posted('open', MONDAY)), morning: null }) });
+
+  const statuses = { ...allSchools(posted('open', MONDAY)), PMASD: posted('closed', TUESDAY) };
+  const result = await run(store, '2030-01-15T15:17:00Z', statuses, { minTempF: 40, minWindChillF: 38, precipIn: 0, minVisibilityMi: 10 });
+
+  const pennsManor = store.state.history.find(r => r.school === 'Penns Manor');
+  assert.equal(pennsManor.cause, 'non-winter');
+  assert.deepEqual(result.setAside, [{ school: 'Penns Manor', status: 'closed' }]);
+  const forecast = store.state.predictions.find(e => e.school === 'Penns Manor' && e.date === TUESDAY);
+  assert.equal(forecast.correct, null);
+  assert.equal(forecast.excluded, 'Non-weather closure');
+  // The other five are ordinary open days, called correctly
+  assert.equal(store.state.predictions.filter(e => e.date === TUESDAY && e.correct === true).length, 5);
+
+  // Had a second district been delayed too, both would count against the forecast
+  const second = memoryStore();
+  await logWeatherData({ now: new Date('2030-01-15T01:30:00Z'), store: second, sources: stagedSources({ inputs: quiet, statuses: allSchools(posted('open', MONDAY)), morning: null }) });
+  await run(second, '2030-01-15T15:17:00Z', { ...statuses, USD: posted('2-hour delay', TUESDAY) }, { minTempF: 40, minWindChillF: 38, precipIn: 0, minVisibilityMi: 10 });
+  assert.equal(second.state.predictions.filter(e => e.date === TUESDAY && e.correct === false).length, 2);
+});
+
 // ---------- forecasts are not replaced by guesses made without data ----------
 
 test('with the alert feed down, the forecast on file is left alone', async () => {
@@ -538,21 +662,145 @@ test('with the alert feed down, the forecast on file is left alone', async () =>
   assert.ok(result.errors.some(e => e.type === 'alerts_unavailable'));
   // What is shown meanwhile still carries the advisory that was on file
   assert.ok(result.predictions.forecast.every(f => f.probability >= 50));
+
+  // A morning with nothing on file yet still gets a forecast: one made
+  // without alerts is better than none, and the next good run refreshes it
+  const empty = memoryStore();
+  const first = await logWeatherData({
+    now: new Date('2030-01-15T06:17:00Z'),
+    store: empty,
+    sources: stagedSources({ inputs, statuses: allSchools(posted('open', MONDAY)), morning: null })
+  });
+  assert.equal(first.predictions.savedForTarget, 6);
+  assert.ok(first.errors.some(e => e.type === 'alerts_unavailable'));
+  assert.ok(empty.state.predictions.every(e => e.date === TUESDAY && e.features.alerts.length === 0));
 });
 
-test('with the weather grid down, a forecast built from nothing is not filed', async () => {
+test('with the weather grid down and the alerts unchanged, the forecast on file is left as it is', async () => {
   const store = memoryStore();
   await fileStormForecast(store);
   const before = JSON.stringify(store.state.predictions);
 
-  // 4:17 PM Monday would be before the storm night; use 1:17 AM with every forecast source gone
+  // 1:17 AM: no grid, no worded forecast; the advisory is still in force
+  const alerts = [makeAlert('Winter Weather Advisory', MONDAY, 22, 34)];
   const result = await logWeatherData({
     now: new Date('2030-01-15T06:17:00Z'),
     store,
-    sources: stagedSources({ inputs: makeInputs(), statuses: allSchools(posted('open', MONDAY)), morning: null })
+    sources: stagedSources({ inputs: makeInputs({ alerts }), statuses: allSchools(posted('open', MONDAY)), morning: null })
   });
   assert.equal(JSON.stringify(store.state.predictions), before);
   assert.equal(result.predictions.savedForTarget, 0);
+  assert.ok(result.predictions.forecast.every(f => f.probability >= 50));
+});
+
+test('a warning issued while the weather grid is down is still filed', async () => {
+  // Monday 4:17 PM: under an inch of snow in the forecast, no alert
+  const store = memoryStore();
+  const grid = makeGrid(TUESDAY, { snow: [0, 0.4, 0.4, 0], windChill: [22, 22, 22, 22, 23], temperature: [28, 28, 28, 28, 29] });
+  await logWeatherData({ now: new Date('2030-01-14T21:17:00Z'), store, sources: stagedSources({ inputs: makeInputs({ grid }), statuses: allSchools(posted('open', MONDAY)), morning: null }) });
+  const first = store.state.predictions.find(e => e.school === 'Indiana');
+  assert.equal(first.predictedDisruption, false);
+
+  // 7:17 PM: the grid cannot be reached, and a Winter Storm Warning is out
+  const warning = [makeAlert('Winter Storm Warning', MONDAY, 23, 37)];
+  const result = await logWeatherData({ now: new Date('2030-01-15T00:17:00Z'), store, sources: stagedSources({ inputs: makeInputs({ alerts: warning }), statuses: allSchools(posted('open', MONDAY)), morning: null }) });
+
+  assert.equal(result.predictions.savedForTarget, 6);
+  const entry = store.state.predictions.find(e => e.school === 'Indiana');
+  assert.equal(entry.predictedDisruption, true);
+  assert.deepEqual(entry.features.alerts, ['Winter Storm Warning@bus-time']);
+  // The snow figures are the ones already on file, and the earlier forecast is kept in the history
+  assert.equal(entry.features.source, 'on-file');
+  assert.equal(entry.features.snowOvernightIn, first.features.snowOvernightIn);
+  assert.deepEqual(entry.features.snowBlocks, first.features.snowBlocks);
+  assert.deepEqual(entry.history, [{ madeAt: first.madeAt, probability: first.probability }]);
+});
+
+// Worded forecasts for Tuesday morning, as NWS words them
+const hourlyTemps = () => ({
+  periods: [5, 6, 7, 8].map(hour => ({
+    startTime: new Date(easternToMs(TUESDAY, hour)).toISOString(),
+    temperature: 30, windSpeed: '5 mph', shortForecast: 'Cloudy', probabilityOfPrecipitation: 10
+  }))
+});
+const snowyNightForecast = () => ({
+  periods: [{
+    name: 'Monday Night', isDaytime: false,
+    startTime: new Date(easternToMs(MONDAY, 18)).toISOString(),
+    endTime: new Date(easternToMs(TUESDAY, 6)).toISOString(),
+    detailedForecast: 'Snow. Low around 26. New snow accumulation of 5 to 8 inches possible.'
+  }]
+});
+
+test('temperatures alone never replace a real forecast', async () => {
+  // Monday 1:17 PM: six inches of snow on the way, filed from the grid
+  const store = memoryStore();
+  const grid = makeGrid(TUESDAY, { snow: [0, 3.5, 3, 0], windChill: [20, 20, 20, 20, 21], temperature: [26, 26, 26, 26, 27] });
+  await logWeatherData({ now: new Date('2030-01-14T18:17:00Z'), store, sources: stagedSources({ inputs: makeInputs({ grid }), statuses: allSchools(posted('open', MONDAY)), morning: null }) });
+  const before = JSON.stringify(store.state.predictions);
+  assert.ok(store.state.predictions.every(e => e.predictedDisruption && e.features.source === 'grid'));
+
+  // 4:17 PM: the grid and the 7-day forecast fail; only hourly temperatures answer
+  const result = await logWeatherData({
+    now: new Date('2030-01-14T21:17:00Z'), store,
+    sources: stagedSources({ inputs: makeInputs({ hourlyForecast: hourlyTemps() }), statuses: allSchools(posted('open', MONDAY)), morning: null })
+  });
+  assert.equal(JSON.stringify(store.state.predictions), before);
+  assert.equal(result.predictions.savedForTarget, 0);
+  assert.ok(result.predictions.forecast.every(f => f.probability >= 50)); // still the forecast on file
+});
+
+test('with nothing on file, a forecast that knows nothing about snow is not filed', async () => {
+  const store = memoryStore();
+  const temperaturesOnly = await logWeatherData({
+    now: new Date('2030-01-14T21:17:00Z'), store,
+    sources: stagedSources({ inputs: makeInputs({ hourlyForecast: hourlyTemps() }), statuses: allSchools(posted('open', MONDAY)), morning: null })
+  });
+  assert.equal(temperaturesOnly.predictions.savedForTarget, 0);
+  assert.equal(store.state.predictions.length, 0);
+
+  // With the 7-day forecast as well, the worded forecast is a forecast
+  const worded = await logWeatherData({
+    now: new Date('2030-01-14T21:17:00Z'), store,
+    sources: stagedSources({ inputs: makeInputs({ forecast: snowyNightForecast(), hourlyForecast: hourlyTemps() }), statuses: allSchools(posted('open', MONDAY)), morning: null })
+  });
+  assert.equal(worded.predictions.savedForTarget, 6);
+  assert.ok(store.state.predictions.every(e => e.features.source === 'text' && e.features.snowOvernightIn === 6.5));
+});
+
+test('when NWS moves the same snow to a different part of the night, the periods on file follow', async () => {
+  const store = memoryStore();
+  const base = { windChill: [22, 22, 22, 22, 23], temperature: [28, 28, 28, 28, 29] };
+  const at = (iso, grid) => logWeatherData({ now: new Date(iso), store, sources: stagedSources({ inputs: makeInputs({ grid }), statuses: allSchools(posted('open', MONDAY)), morning: null }) });
+
+  // Monday 4:17 PM: 2.4 in between 7 PM and 1 AM
+  await at('2030-01-14T21:17:00Z', makeGrid(TUESDAY, { ...base, snow: [0, 2.4, 0, 0] }));
+  const first = JSON.parse(JSON.stringify(store.state.predictions.find(e => e.school === 'Indiana')));
+
+  // 10:17 PM: the same 2.4 in, now between 1 and 7 AM. Same total, same chance.
+  const moved = await at('2030-01-15T03:17:00Z', makeGrid(TUESDAY, { ...base, snow: [0, 0, 2.4, 0] }));
+  const second = store.state.predictions.find(e => e.school === 'Indiana');
+  assert.equal(moved.predictions.savedForTarget, 6);
+  assert.equal(second.probability, first.probability);
+  assert.equal(second.madeAt, first.madeAt);                       // same forecast, not re-dated
+  assert.notDeepEqual(second.features.snowBlocks, first.features.snowBlocks);
+
+  // 5 AM: the grid now starts at 11 PM. The page adds the hours it has dropped
+  // from the periods on file - and must find no snow there.
+  const lateGrid = makeGrid(TUESDAY, { ...base, snow: [0, 0, 2.4, 0] });
+  const elevenPm = easternToMs(MONDAY, 23);
+  lateGrid.series.snowfallAmount = lateGrid.series.snowfallAmount
+    .filter(block => block.end > elevenPm)
+    .map(block => (block.start >= elevenPm ? block : { start: elevenPm, end: block.end, value: block.value * (block.end - elevenPm) / (block.end - block.start) }));
+  const onFile = Object.fromEntries(['IASD', 'HCSD', 'MCASD', 'PMASD', 'PLSD', 'USD'].map(code => [code, second.features]));
+  const page = predictAllDistricts(makeInputs({ grid: lateGrid }), { now: new Date('2030-01-15T10:00:00Z'), targetDate: TUESDAY, onFile });
+  assert.equal(page.county.features.snowOvernightIn, 2.4);
+
+  // A third run with nothing new writes nothing
+  const before = JSON.stringify(store.state.predictions);
+  const unchanged = await at('2030-01-15T06:17:00Z', lateGrid);
+  assert.equal(unchanged.predictions.savedForTarget, 0);
+  assert.equal(JSON.stringify(store.state.predictions), before);
 });
 
 test('an announcement is noted without re-dating the forecast', async () => {
@@ -652,6 +900,9 @@ test('the scorecard counts live, verified, weather-relevant forecasts only', () 
     { scored: audit.current.scored, caught: audit.current.caught, missed: audit.current.missed, falseAlarms: audit.current.falseAlarms },
     { scored: 2, caught: 1, missed: 0, falseAlarms: 0 });
   assert.equal(audit.pendingCount, 1); // only the forecast still ahead; a stale unresolved Saturday is not "pending"
+  // What was left out as unrelated to weather is reported, not hidden
+  assert.equal(audit.current.setAside, 1);
+  assert.deepEqual(audit.current.setAsideDates, ['2026-12-03']);
 });
 
 test('with nothing scored yet the audit says so', () => {

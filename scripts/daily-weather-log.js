@@ -85,6 +85,15 @@ async function main() {
       console.log('');
     }
 
+    if (result.setAside && result.setAside.length > 0) {
+      console.log(`Set aside as not weather-related, so not scored (${result.setAside.length}):`);
+      result.setAside.forEach(record => {
+        console.log(`  - ${record.school}: ${record.status}`);
+      });
+      console.log('  If this was a planned day off, list it in api/_lib/nonWeatherClosures.json.');
+      console.log('');
+    }
+
     if (result.skipped.length > 0) {
       console.log(`Skipped (${result.skipped.length}):`);
       result.skipped.forEach(skip => {

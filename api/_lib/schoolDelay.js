@@ -741,6 +741,7 @@ function predictAllDistricts(inputs, { now = new Date(), targetDate = getTargetS
       forecast: inputs.forecast,
       hourlyForecast: inputs.hourlyForecast,
       alerts: inputs.alerts,
+      alertTimeline: inputs.alertTimeline,
       zones: school.zones,
       current: inputs.current,
       onFile: onFile[school.code],

@@ -45,6 +45,17 @@ async function handler(req, res) {
 
     const result = await logWeatherData(options);
 
+    // A run that had to be abandoned, or could not write its results (this
+    // host's file system is read-only), must not be reported as a success.
+    const failure = result.errors.find(err => err.type === 'fetch_error' || err.type === 'prediction_tracking');
+    if (failure) {
+      return res.status(500).json({
+        success: false,
+        message: `The run could not be completed: ${failure.message}`,
+        ...result
+      });
+    }
+
     return res.json({
       success: true,
       message: result.logged.length > 0

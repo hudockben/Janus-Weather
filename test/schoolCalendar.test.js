@@ -1,7 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  getFixedHoliday, getNonSchoolReason, isSchoolDay, getTargetSchoolDay, isWinterSeason, loadNonWeatherClosures
+  getFixedHoliday, getNonSchoolReason, isSchoolDay, getTargetSchoolDay, isWinterSeason, loadNonWeatherClosures,
+  readClosuresFile, tolerateBrokenCalendar
 } = require('../api/_lib/schoolCalendar');
 
 test('Thanksgiving is the fourth Thursday of November, plus the Friday', () => {
@@ -102,4 +103,49 @@ test('winter season is November through March', () => {
   assert.equal(isWinterSeason('2027-03-31'), true);
   assert.equal(isWinterSeason('2026-10-31'), false);
   assert.equal(isWinterSeason('2027-04-01'), false);
+});
+
+test('a days-off file that cannot be parsed is an error, not an empty calendar', () => {
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'calendar-test-'));
+  const file = path.join(dir, 'nonWeatherClosures.json');
+
+  fs.writeFileSync(file, '[{ "date": "2030-01-21", "schools": "all", "reason": "MLK Day" },]'); // trailing comma
+  assert.throws(() => readClosuresFile(file), /not valid JSON/);
+  fs.writeFileSync(file, '{ "date": "2030-01-21" }');
+  assert.throws(() => readClosuresFile(file), /must be a list/);
+  assert.deepEqual(readClosuresFile(path.join(dir, 'missing.json')), []); // no file: no listed days off
+  fs.rmSync(dir, { recursive: true });
+
+  // The shipped file is fine, so the website has nothing to tolerate
+  assert.equal(tolerateBrokenCalendar(), null);
+});
+
+test('the website carries on with the built-in holidays when the days-off file is broken; the logger does not', () => {
+  // A fresh process whose copy of the file has a typo in it
+  const { execFileSync } = require('node:child_process');
+  const script = `
+    const fs = require('fs');
+    const realRead = fs.readFileSync;
+    fs.readFileSync = (file, ...rest) => String(file).endsWith('nonWeatherClosures.json') ? '[{"date": "2030-01-21",}]' : realRead(file, ...rest);
+    const calendar = require('./api/_lib/schoolCalendar');
+    const attempt = fn => { try { return fn(); } catch (error) { return 'threw: ' + error.message.slice(0, 43); } };
+    const out = {};
+    out.before = attempt(() => calendar.isSchoolDay('2030-01-15'));
+    out.problem = String(calendar.tolerateBrokenCalendar()).slice(0, 43);
+    out.schoolDay = attempt(() => calendar.isSchoolDay('2030-01-15'));
+    out.christmas = attempt(() => calendar.getNonSchoolReason('2030-12-25'));
+    out.strict = attempt(() => calendar.loadNonWeatherClosures({ strict: true }));
+    console.log(JSON.stringify(out));
+  `;
+  const out = JSON.parse(execFileSync(process.execPath, ['-e', script], { cwd: require('node:path').join(__dirname, '..'), encoding: 'utf8' }));
+  assert.deepEqual(out, {
+    before: 'threw: nonWeatherClosures.json is not valid JSON (',
+    problem: 'nonWeatherClosures.json is not valid JSON (',
+    schoolDay: true,
+    christmas: 'Winter break',
+    strict: 'threw: nonWeatherClosures.json is not valid JSON ('
+  });
 });

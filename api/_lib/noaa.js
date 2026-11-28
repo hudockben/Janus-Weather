@@ -23,8 +23,15 @@ const REGIONAL_ZONES = ['PAZ021', 'PAZ020'];
 
 const REQUEST_TIMEOUT_MS = 8000;
 const MM_PER_INCH = 25.4;
+const METERS_PER_MILE = 1609.344;
 
-async function fetchWithRetry(url, retries = 3) {
+// How far back the alert history is read, and how long that request may take.
+// Three days reaches well before the evening that opens any school morning's
+// windows; the request is tried once so a slow answer cannot hold up the page.
+const ALERT_HISTORY_MS = 72 * 60 * 60 * 1000;
+const ALERT_HISTORY_TIMEOUT_MS = 5000;
+
+async function fetchWithRetry(url, retries = 3, timeoutMs = REQUEST_TIMEOUT_MS) {
   for (let i = 0; i < retries; i++) {
     try {
       const response = await fetch(url, {
@@ -32,7 +39,7 @@ async function fetchWithRetry(url, retries = 3) {
           'User-Agent': USER_AGENT,
           'Accept': 'application/geo+json'
         },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+        signal: AbortSignal.timeout(timeoutMs)
       });
 
       if (!response.ok) {
@@ -104,10 +111,14 @@ async function getNearestStation(location) {
 // 5-9 AM bus window. Unlike "latest observation", the answer does not depend
 // on what time of day the question is asked.
 //
-// With `precipFromMs` (earlier than startMs) the result also carries
-// `precipIn`: the precipitation the station's gauge measured from then until
-// endMs, in inches of water. The station does not report what kind fell, only
-// how much, so this says whether anything fell at all.
+// With `precipFromMs` (earlier than startMs) the result also says what the
+// station saw from then until endMs:
+//   precipIn         what its gauge measured, in inches of water. The gauge at
+//                    the Indiana County airport registers rain but not snow, so
+//                    zero here does not mean nothing fell.
+//   minVisibilityMi  the lowest visibility reported, in miles (null if the
+//                    station sent none). Falling snow always cuts visibility;
+//                    a night that stayed at six miles or more had none.
 async function getObservedWindow(locationKey, startMs, endMs, { precipFromMs = null } = {}) {
   const location = LOCATIONS[locationKey];
   if (!location) {
@@ -150,6 +161,11 @@ async function getObservedWindow(locationKey, startMs, endMs, { precipFromMs = n
     }
     const totalMm = [...byHour.values()].reduce((sum, mm) => sum + mm, 0);
     result.precipIn = Math.round((totalMm / MM_PER_INCH) * 100) / 100;
+
+    const visibilities = observations.map(o => o.visibility?.value).filter(v => v != null);
+    result.minVisibilityMi = visibilities.length > 0
+      ? Math.round((Math.min(...visibilities) / METERS_PER_MILE) * 10) / 10
+      : null;
   }
 
   return result;
@@ -273,10 +289,133 @@ function isAlertInForce(props) {
   return true;
 }
 
-async function getAlerts() {
+// --- Alert history ------------------------------------------------------------
+//
+// The "active" feed only shows what is in force this minute. An advisory that
+// ended at 1 AM, or was cancelled at 4 AM, is simply gone from it, although
+// what it said still explains the morning's roads. The history feed lists every
+// message NWS sent: the alert, each update, and the notice that it was
+// cancelled or had expired. Read together, they say when each alert was really
+// in force.
+
+// "/O.CON.KPBZ.WW.Y.0012.000000T0000Z-261127T0000Z/" - the tracking code NWS
+// puts on every watch, warning and advisory. It names the action taken (NEW,
+// CON-tinued, EXT-ended, CAN-celled, UPG-raded, EXP-ired ...), the event
+// (office, product, number) and its start and end. A start of all zeros means
+// the event is already under way.
+const VTEC_PATTERN = /^\/?[A-Z]\.([A-Z]{3})\.([A-Z]{4})\.([A-Z]{2})\.([A-Z])\.(\d{4})\.(\d{6}T\d{4}Z)-(\d{6}T\d{4}Z)\/?$/;
+
+function parseVtecTime(text) {
+  const match = text.match(/^(\d{2})(\d{2})(\d{2})T(\d{2})(\d{2})Z$/);
+  if (!match || text.startsWith('000000')) return null;
+  const [, year, month, day, hour, minute] = match.map(Number);
+  return Date.UTC(2000 + year, month - 1, day, hour, minute);
+}
+
+function parseVtec(code) {
+  const match = String(code).match(VTEC_PATTERN);
+  if (!match) return null;
+  return {
+    action: match[1],
+    event: `${match[2]}.${match[3]}.${match[4]}.${match[5]}`,
+    begins: parseVtecTime(match[6]),
+    ends: parseVtecTime(match[7])
+  };
+}
+
+// When each alert was in force, worked out from every message about it.
+//
+//   features  alert messages from the NWS API (history and active feeds
+//             together; duplicates are ignored)
+//   codes     zone and county codes to follow
+//
+// Returns one entry per alert and code, shaped like getAlerts().alerts:
+// { event, onset, ends, zones: [code], affectsIndianaCounty, cancelled }.
+// `ends` is when the alert really stopped: the time NWS cancelled or upgraded
+// it, otherwise the end time in its latest message (so an alert that was
+// extended or cut short carries its final end time).
+//
+// Only messages with a tracking code are followed. Every product the school
+// forecast uses carries one.
+function buildAlertTimeline(features, codes = [...INDIANA_COUNTY_ZONES, INDIANA_COUNTY_CODE]) {
+  const wanted = new Set(codes);
+  const seen = new Set();
+  const chains = new Map();
+
+  for (const feature of features || []) {
+    const props = feature?.properties;
+    if (!props || seen.has(props.id)) continue;
+    seen.add(props.id);
+    if (props.status && props.status !== 'Actual') continue;
+
+    const sent = Date.parse(props.sent);
+    if (!Number.isFinite(sent)) continue;
+    const vtecs = (props.parameters?.VTEC || []).map(parseVtec).filter(Boolean);
+
+    for (const code of props.geocode?.UGC || []) {
+      if (!wanted.has(code)) continue;
+      for (const vtec of vtecs) {
+        const key = `${code}|${vtec.event}`;
+        if (!chains.has(key)) chains.set(key, { code, messages: [] });
+        // A message that carries one tracking code is named after that event
+        chains.get(key).messages.push({ props, sent, vtec, named: vtecs.length === 1 });
+      }
+    }
+  }
+
+  const timeline = [];
+  for (const { code, messages } of chains.values()) {
+    messages.sort((a, b) => a.sent - b.sent);
+    const newestFirst = [...messages].reverse();
+    const latest = newestFirst[0];
+
+    // Cancelled, or replaced by a stronger product: over from that moment
+    const cancelled = latest.vtec.action === 'CAN' || latest.vtec.action === 'UPG';
+    const end = cancelled
+      ? latest.sent
+      : latest.vtec.ends ?? Date.parse(latest.props.ends || latest.props.expires);
+
+    // The start comes from the newest message sent before the event began;
+    // if none is in view, the event was already running at the oldest one.
+    const beforeStart = newestFirst.find(message => message.vtec.begins !== null);
+    const oldest = messages[0].props;
+    const start = beforeStart
+      ? beforeStart.vtec.begins
+      : Date.parse(oldest.onset || oldest.effective || oldest.sent);
+
+    // (An alert cancelled before it began was never in force)
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+
+    timeline.push({
+      event: (newestFirst.find(message => message.named) || latest).props.event,
+      onset: new Date(start).toISOString(),
+      ends: new Date(end).toISOString(),
+      zones: [code],
+      affectsIndianaCounty: true,
+      cancelled
+    });
+  }
+
+  return timeline.sort((a, b) => a.onset.localeCompare(b.onset) || a.event.localeCompare(b.event));
+}
+
+// Alerts for Indiana County and its neighbors.
+//
+// With `history`, the result also carries `timeline`: when each Indiana County
+// alert of the last three days was really in force (see buildAlertTimeline),
+// or null if the history could not be read.
+async function getAlerts({ history = false, now = new Date() } = {}) {
   const zones = [...INDIANA_COUNTY_ZONES, INDIANA_COUNTY_CODE, ...REGIONAL_ZONES];
   const alertsUrl = `${BASE_URL}/alerts/active?zone=${zones.join(',')}`;
-  const alerts = await fetchWithRetry(alertsUrl);
+
+  const since = new Date(new Date(now).getTime() - ALERT_HISTORY_MS).toISOString();
+  const historyUrl = `${BASE_URL}/alerts?zone=${[...INDIANA_COUNTY_ZONES, INDIANA_COUNTY_CODE].join(',')}` +
+    `&start=${since}&limit=200`;
+
+  const [alerts, past] = await Promise.all([
+    fetchWithRetry(alertsUrl),
+    history ? fetchWithRetry(historyUrl, 1, ALERT_HISTORY_TIMEOUT_MS).catch(() => null) : null
+  ]);
 
   const indianaCodes = new Set([...INDIANA_COUNTY_ZONES, INDIANA_COUNTY_CODE]);
   const westernPACounties = ['indiana', 'allegheny', 'westmoreland', 'armstrong', 'cambria', 'jefferson', 'clearfield'];
@@ -315,7 +454,8 @@ async function getAlerts() {
 
   return {
     count: relevantAlerts.length,
-    alerts: relevantAlerts
+    alerts: relevantAlerts,
+    timeline: past ? buildAlertTimeline([...(past.features || []), ...(alerts.features || [])]) : null
   };
 }
 
@@ -412,6 +552,7 @@ module.exports = {
   getObservedWindow,
   getAlerts,
   isAlertInForce,
+  buildAlertTimeline,
   getLocations,
   parseValidTime,
   calculateWindChill,

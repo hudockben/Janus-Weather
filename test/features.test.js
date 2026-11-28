@@ -237,15 +237,49 @@ test('a newer, milder forecast is never overridden by the colder one on file', (
   assert.equal(features.commutePrecip, null);
 });
 
-test('with NWS unreachable overnight, the forecast on file still stands', () => {
-  const onFile = { snowOvernightIn: 4.2, iceIn: 0.05, minWindChillF: 8, minTempF: 18, commutePrecip: 'snow' };
-  const sixAm = new Date('2030-01-15T11:00:00Z');
-  const features = buildFeatures({ targetDate: TARGET, grid: null, alerts: [], now: sixAm, onFile });
-  assert.equal(features.snowOvernightIn, 4.2);
-  assert.equal(features.iceIn, 0.05);
-  assert.equal(features.minWindChillF, 8);
-  assert.equal(features.commutePrecip, 'snow');
-  assert.equal(features.source, 'on-file');
+test('with the grid unreachable, the numbers on file stand - at any hour', () => {
+  const grid = makeGrid(TARGET, { snow: [0, 2.2, 2.0, 0], ice: [0, 0.05, 0, 0], windChill: [9, 8, 8, 9, 11], temperature: [19, 18, 18, 19, 21],
+    weather: [{ fromHour: 5, toHour: 9, types: [{ weather: 'snow', coverage: 'likely' }] }] });
+  const noon = new Date('2030-01-14T17:00:00Z'); // Monday noon, before the storm night
+  const onFile = compactFeatures(buildFeatures({ targetDate: TARGET, grid, alerts: [], now: noon }));
+
+  for (const now of [new Date('2030-01-14T21:17:00Z'), new Date('2030-01-15T11:00:00Z')]) { // Monday 4:17 PM, Tuesday 6 AM
+    const features = buildFeatures({ targetDate: TARGET, grid: null, alerts: [], now, onFile });
+    assert.equal(features.source, 'on-file');
+    assert.equal(features.snowOvernightIn, 4.2);
+    assert.equal(features.iceIn, 0.05);
+    assert.equal(features.minWindChillF, 8);
+    assert.equal(features.commutePrecip, 'snow');
+    // The periods are carried along too, so the next run can still account for hours gone by
+    assert.deepEqual(compactFeatures(features).snowBlocks, onFile.snowBlocks);
+  }
+});
+
+test('the worded forecast does not displace grid numbers on file, and does not invent a dry night', () => {
+  const hourly = { periods: [5, 6, 7, 8].map(hour => ({
+    startTime: new Date(Date.UTC(2030, 0, 15, hour + 5)).toISOString(), temperature: 30, windSpeed: '5 mph', shortForecast: 'Cloudy'
+  })) };
+  const fourPm = new Date('2030-01-14T21:17:00Z');
+
+  // Grid numbers on file, grid and 7-day forecast both down: the file wins over hourly temperatures
+  const onFile = { source: 'grid', snowOvernightIn: 6.6, snowSchoolDayIn: 0, iceIn: 0, minTempF: 26, minWindChillF: 20, commutePrecip: 'snow', alerts: [], snowBlocks: [], iceBlocks: [] };
+  const kept = buildFeatures({ targetDate: TARGET, grid: null, hourlyForecast: hourly, alerts: [], now: fourPm, onFile });
+  assert.equal(kept.source, 'on-file');
+  assert.equal(kept.snowOvernightIn, 6.6);
+  assert.equal(kept.minWindChillF, 20);
+
+  // Nothing on file: temperatures are read, but snow stays unknown rather than zero
+  const temperaturesOnly = buildFeatures({ targetDate: TARGET, grid: null, hourlyForecast: hourly, alerts: [], now: fourPm });
+  assert.equal(temperaturesOnly.source, 'temps-only');
+  assert.equal(temperaturesOnly.snowOvernightIn, null);
+  assert.equal(temperaturesOnly.iceIn, null);
+  assert.equal(temperaturesOnly.minTempF, 30);
+
+  // Numbers on file that themselves came from the worded forecast are not preferred to a fresh reading of it
+  const fromText = { ...onFile, source: 'text', snowOvernightIn: 1 };
+  const refreshed = buildFeatures({ targetDate: TARGET, grid: null, hourlyForecast: hourly, alerts: [], now: fourPm, onFile: fromText });
+  assert.equal(refreshed.source, 'temps-only');
+  assert.equal(refreshed.snowOvernightIn, null);
 });
 
 test('an alert that ran its course still counts; one that was cancelled does not', () => {
@@ -282,6 +316,55 @@ test('an advisory that expires at 7 AM still explains the morning at 7:05', () =
   const sevenOhFive = new Date('2030-01-15T12:05:00Z');
   const features = buildFeatures({ targetDate: TARGET, grid, alerts: [], now: sevenOhFive, onFile });
   assert.deepEqual(features.alerts.map(a => `${a.event}@${a.timing}`), ['Winter Weather Advisory@bus-time']);
+});
+
+// ---------- alerts read from NWS's history of what was issued ----------
+
+// A timeline entry as buildAlertTimeline() returns it. Hours are Eastern, from midnight Monday.
+const span = (event, fromHour, toHour, zones = ['PAZ077'], cancelled = false) => ({
+  ...makeAlert(event, '2030-01-14', fromHour, toHour, zones), cancelled
+});
+const labels = features => features.alerts.map(a => `${a.event}@${a.timing}`);
+const stormGrid = () => makeGrid(TARGET, { snow: [0, 1.2, 1.2, 0], windChill: [20, 20, 20, 20, 20], temperature: [26, 26, 26, 26, 26] });
+
+test('an advisory that was never on file still counts after it ends', () => {
+  // Issued 2:30 AM for 3-7 AM, after the night's last logger run: nothing on file
+  const alertTimeline = [span('Winter Weather Advisory', 27, 31)];
+  for (const now of ['2030-01-15T08:45:00Z', '2030-01-15T11:55:00Z', '2030-01-15T12:05:00Z', '2030-01-15T13:30:00Z']) { // 3:45, 6:55, 7:05, 8:30 AM
+    const features = buildFeatures({ targetDate: TARGET, grid: stormGrid(), alerts: [], alertTimeline, now: new Date(now) });
+    assert.deepEqual(labels(features), ['Winter Weather Advisory@bus-time'], now);
+  }
+});
+
+test('a cancelled advisory does not come back at its original end time', () => {
+  // On file: advisory 10 PM - 7 AM. NWS cancelled it at 4 AM.
+  const onFile = compactFeatures(buildFeatures({ targetDate: TARGET, grid: stormGrid(), alerts: [makeAlert('Winter Weather Advisory', '2030-01-14', 22, 31)], now: eveningBefore }));
+  assert.deepEqual(onFile.alerts, ['Winter Weather Advisory@bus-time']);
+  const alertTimeline = [span('Winter Weather Advisory', 22, 28, ['PAZ077'], true)];
+
+  const readings = ['2030-01-15T09:30:00Z', '2030-01-15T11:55:00Z', '2030-01-15T12:05:00Z', '2030-01-15T13:30:00Z'] // 4:30, 6:55, 7:05, 8:30 AM
+    .map(now => buildFeatures({ targetDate: TARGET, grid: stormGrid(), alerts: [], alertTimeline, now: new Date(now), onFile }));
+  // In force overnight until it was cancelled - and the same answer all morning
+  for (const features of readings) {
+    assert.deepEqual(labels(features), ['Winter Weather Advisory@overnight']);
+  }
+
+  // Cancelled before it ever began: not an alert at all
+  const never = buildFeatures({ targetDate: TARGET, grid: stormGrid(), alerts: [], alertTimeline: [], now: new Date('2030-01-15T12:05:00Z'), onFile });
+  assert.deepEqual(never.alerts, []);
+});
+
+test('an advisory cut short, or kept for the ridges only, is read as NWS left it', () => {
+  // Shortened at 2 AM to end at 4 AM instead of 7 AM
+  const shortened = buildFeatures({ targetDate: TARGET, grid: stormGrid(), alerts: [], alertTimeline: [span('Winter Weather Advisory', 22, 28)], now: new Date('2030-01-15T12:05:00Z') });
+  assert.deepEqual(labels(shortened), ['Winter Weather Advisory@overnight']);
+
+  // Cancelled for the lowlands at midnight, kept until 9 AM for the higher elevations
+  const alertTimeline = [span('Winter Weather Advisory', 20, 24, ['PAZ077'], true), span('Winter Weather Advisory', 20, 33, ['PAZ078'])];
+  const at = zones => buildFeatures({ targetDate: TARGET, grid: stormGrid(), alerts: [], alertTimeline, zones, now: new Date('2030-01-15T10:00:00Z') });
+  assert.deepEqual(labels(at(['PAZ077'])), ['Winter Weather Advisory@overnight']);
+  assert.deepEqual(labels(at(['PAZ078'])), ['Winter Weather Advisory@bus-time']);
+  assert.deepEqual(labels(at(['PAZ077', 'PAZ078'])), ['Winter Weather Advisory@bus-time']);
 });
 
 test('ice and the kind of precipitation at bus time come from the grid', () => {

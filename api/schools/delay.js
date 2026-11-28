@@ -2,7 +2,7 @@ const { getSchoolStatuses, riskTier, DISCLAIMER } = require('../_lib/schoolDelay
 const { getSchoolForecast, withDeadline } = require('../_lib/schoolForecast');
 const { getPredictionAccuracy, getForecastOnFile } = require('../_lib/weatherLogger');
 const { easternParts, addDays, weekdayName } = require('../_lib/easternTime');
-const { getTargetSchoolDay, getNonSchoolReason } = require('../_lib/schoolCalendar');
+const { getTargetSchoolDay, getNonSchoolReason, tolerateBrokenCalendar } = require('../_lib/schoolCalendar');
 
 const DISRUPTIONS = new Set(['closed', '2-hour delay', 'delayed', 'early dismissal', 'flexible instruction']);
 const CLOSURES = new Set(['closed', 'flexible instruction']);
@@ -25,13 +25,25 @@ module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 's-maxage=300');
 
   try {
+    // A days-off file or forecast log that cannot be read (a typo in a hand
+    // edit) must not take the forecast off the page. The page carries on
+    // without them; the logger is what stops and reports the broken file.
+    const calendarProblem = tolerateBrokenCalendar();
+
     const now = new Date();
     const today = easternParts(now).dateStr;
     const targetDate = getTargetSchoolDay(now);
 
+    let onFile = {};
+    try {
+      onFile = getForecastOnFile(targetDate);
+    } catch (error) {
+      console.error('Forecast log unreadable:', error.message);
+    }
+
     // Forecast for the next school morning, plus what the districts have posted
     const [forecast, schoolStatuses] = await Promise.all([
-      getSchoolForecast({ now, targetDate, onFile: getForecastOnFile(targetDate), deadlineMs: SOURCE_DEADLINE_MS }),
+      getSchoolForecast({ now, targetDate, onFile, deadlineMs: SOURCE_DEADLINE_MS }),
       withDeadline(getSchoolStatuses(), SOURCE_DEADLINE_MS).catch(() => ({}))
     ]);
 
@@ -87,6 +99,22 @@ module.exports = async (req, res) => {
     // Get prediction accuracy stats
     const accuracy = getPredictionAccuracy();
 
+    // Anything the forecast normally rests on that could not be loaded
+    const notices = [];
+    if (!forecast.noData) {
+      if (!inputs.alertsAvailable) {
+        notices.push('NWS alerts could not be loaded just now. Any alert shown is the last one on file; check weather.gov for current alerts.');
+      }
+      if (county.features.source === 'on-file') {
+        notices.push('The NWS snow and temperature forecast could not be loaded just now; those figures are from the last forecast on file.');
+      } else if (county.features.source === 'temps-only') {
+        notices.push('The NWS snow and ice forecast could not be loaded just now, so this estimate rests on temperature and alerts alone.');
+      }
+    }
+    if (calendarProblem) {
+      notices.push('The list of school days off could not be read, so only the standard holidays are being skipped.');
+    }
+
     res.json({
       location: 'Indiana County, PA',
       timestamp: now.toISOString(),
@@ -118,9 +146,7 @@ module.exports = async (req, res) => {
       recommendation,
       announcements,
       // Set when something the forecast depends on could not be loaded
-      notice: !forecast.noData && !inputs.alertsAvailable
-        ? 'NWS alerts could not be loaded just now. Any alert shown is the last one on file; check weather.gov for current alerts.'
-        : null,
+      notice: notices.length > 0 ? notices.join(' ') : null,
       factors: county.factors,
       historicalMatch: county.historicalMatch,
       // What the model saw for the county seat, for transparency

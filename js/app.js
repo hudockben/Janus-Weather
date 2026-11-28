@@ -595,6 +595,7 @@ function renderSelfAudit(audit) {
   }
 
   const sinceDate = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const shortDate = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const current = audit.current;
   const previous = audit.previous;
 
@@ -619,6 +620,7 @@ function renderSelfAudit(audit) {
       <span class="${current && current.disruptions > 0 ? 'accuracy-value' : 'accuracy-collecting'}">${headline}</span>
     </div>
     <div class="accuracy-detail">${detail}</div>
+    ${current && current.setAside > 0 ? `<div class="accuracy-detail">Not scored: ${current.setAside} closure${current.setAside === 1 ? '' : 's'} or delay${current.setAside === 1 ? '' : 's'} judged unrelated to weather (${current.setAsideDates.map(shortDate).join(', ')})</div>` : ''}
     ${previous ? `<div class="accuracy-detail">Previous model (${sinceDate(previous.since)} &ndash; ${sinceDate(previous.through)}): ${describeScore(previous)}</div>` : ''}
     ${barWidth !== null ? `
       <div class="accuracy-bar-container">

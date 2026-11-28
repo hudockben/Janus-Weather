@@ -33,7 +33,7 @@ async function fetchForecastInputs({ deadlineMs = 0 } = {}) {
     attempt('weather_fetch', getCurrentConditions('indiana')),
     attempt('forecast_fetch', getForecast('indiana')),
     attempt('hourly_fetch', getHourlyForecast('indiana')),
-    attempt('alerts_fetch', getAlerts()),
+    attempt('alerts_fetch', getAlerts({ history: true })),
     ...INDIANA_COUNTY_SCHOOLS.map(school =>
       attempt(`grid_fetch_${school.code}`, getGridForecast({ lat: school.lat, lon: school.lon })))
   ]);
@@ -46,6 +46,9 @@ async function fetchForecastInputs({ deadlineMs = 0 } = {}) {
     forecast,
     hourlyForecast,
     alerts: alertsData ? alertsData.alerts : [],
+    // When each recent alert was really in force (null if NWS's alert history
+    // could not be read; the active list above then has to do)
+    alertTimeline: alertsData?.timeline ?? null,
     alertsAvailable: alertsData !== null,
     grids,
     errors

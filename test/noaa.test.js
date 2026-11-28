@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  isAlertInForce, parseValidTime, calculateWindChill, getAlerts, getGridForecast, getObservedWindow
+  isAlertInForce, buildAlertTimeline, parseValidTime, calculateWindChill, getAlerts, getGridForecast, getObservedWindow
 } = require('../api/_lib/noaa');
 
 // Answer the NWS API locally. `routes` maps a URL fragment to a JSON body;
@@ -152,12 +152,13 @@ test('grid values are converted from metric', async () => {
 });
 
 test('the station reading is the minimum over the window asked for, with the gauge total', async () => {
-  const report = (time, tempC, windKmh, precipMm = null) => ({
+  const report = (time, tempC, windKmh, precipMm = null, visibilityM = 16090) => ({
     properties: {
       timestamp: time,
       temperature: { value: tempC },
       windSpeed: { value: windKmh },
-      precipitationLastHour: { value: precipMm }
+      precipitationLastHour: { value: precipMm },
+      visibility: { value: visibilityM }
     }
   });
   const observations = {
@@ -166,7 +167,7 @@ test('the station reading is the minimum over the window asked for, with the gau
       report('2026-12-02T11:55:00+00:00', -9, 24, 0.5),   // 6:55 AM: the low
       report('2026-12-02T11:35:00+00:00', -8, 20, 0.5),   // same clock hour: gauge total counted once
       report('2026-12-02T10:15:00+00:00', -6, null),      // 5:15 AM, calm reported as missing wind
-      report('2026-12-02T04:55:00+00:00', -15, 30, 1.27), // 11:55 PM: before the window, but its precipitation counts
+      report('2026-12-02T04:55:00+00:00', -15, 30, 1.27, 1287), // 11:55 PM: before the window, but its precipitation and 0.8-mile visibility count
       report('2026-12-02T10:35:00+00:00', null, 10)       // no temperature: skipped
     ]
   };
@@ -180,6 +181,7 @@ test('the station reading is the minimum over the window asked for, with the gau
     assert.equal(morning.minTempF, 16);          // -9 C, not the -15 C from before the window
     assert.equal(morning.minWindChillF, 1);      // 15.8 F in a 15 mph wind
     assert.equal(morning.precipIn, 0.07);        // 0.5 mm + 1.27 mm
+    assert.equal(morning.minVisibilityMi, 0.8);  // the lowest since the evening before
 
     const url = new URL(requested.find(u => u.includes('/observations')));
     assert.equal(url.searchParams.get('start'), '2026-12-01T23:00:00.000Z');
@@ -188,9 +190,119 @@ test('the station reading is the minimum over the window asked for, with the gau
     // Without the gauge option only the window itself is requested
     const plain = await getObservedWindow('indiana', start, end);
     assert.equal(plain.precipIn, undefined);
+    assert.equal(plain.minVisibilityMi, undefined);
   });
 
   await withNws({ '/points/': POINT, '/stations/KIDI/observations': { features: [] }, '/stations': STATIONS }, async () => {
     assert.equal(await getObservedWindow('indiana', start, end), null);
+  });
+});
+
+// ---------- when each alert was really in force ----------
+
+// One message from the NWS alert feeds. `vtec` is "ACTION.PRODUCT.NUMBER begin-end"
+// with times as yymmddThhmmZ (zeros = already under way).
+let messageCount = 0;
+function message(event, sent, vtec, zones, extra = {}) {
+  const [action, product, number, times] = vtec.split(' ');
+  return {
+    properties: {
+      id: `urn:test:${++messageCount}`,
+      status: 'Actual', event, sent,
+      messageType: action === 'NEW' ? 'Alert' : (action === 'CAN' || action === 'UPG' ? 'Cancel' : 'Update'),
+      geocode: { UGC: zones },
+      parameters: { VTEC: [`/O.${action}.KPBZ.${product}.${number}.${times}/`] },
+      ...extra
+    }
+  };
+}
+const summary = timeline => timeline.map(t => `${t.zones[0]} ${t.event} ${t.onset.slice(5, 16)} to ${t.ends.slice(5, 16)}${t.cancelled ? ' cancelled' : ''}`);
+
+test('an alert that ran its course is read from its last message', () => {
+  // Advisory issued Monday afternoon for 10 PM - 7 AM EST, continued overnight, expired on time
+  const timeline = buildAlertTimeline([
+    message('Winter Weather Advisory', '2030-01-14T20:10:00Z', 'NEW WW.Y 0003 300115T0300Z-300115T1200Z', ['PAZ077', 'PAZ078']),
+    message('Winter Weather Advisory', '2030-01-15T08:20:00Z', 'CON WW.Y 0003 000000T0000Z-300115T1200Z', ['PAZ077', 'PAZ078']),
+    message('Winter Weather Advisory', '2030-01-15T11:58:00Z', 'EXP WW.Y 0003 000000T0000Z-300115T1200Z', ['PAZ077', 'PAZ078'])
+  ]);
+  assert.deepEqual(summary(timeline), [
+    'PAZ077 Winter Weather Advisory 01-15T03:00 to 01-15T12:00',
+    'PAZ078 Winter Weather Advisory 01-15T03:00 to 01-15T12:00'
+  ]);
+});
+
+test('a cancelled alert ends when it was cancelled; one cancelled before it began never was', () => {
+  const issued = message('Winter Weather Advisory', '2030-01-14T20:10:00Z', 'NEW WW.Y 0003 300115T0300Z-300115T1200Z', ['PAZ077']);
+  const cancelledAt4am = message('Winter Weather Advisory', '2030-01-15T09:00:00Z', 'CAN WW.Y 0003 000000T0000Z-300115T1200Z', ['PAZ077']);
+  assert.deepEqual(summary(buildAlertTimeline([cancelledAt4am, issued])),
+    ['PAZ077 Winter Weather Advisory 01-15T03:00 to 01-15T09:00 cancelled']);
+
+  const cancelledAt9pm = message('Winter Weather Advisory', '2030-01-15T02:00:00Z', 'CAN WW.Y 0003 300115T0300Z-300115T1200Z', ['PAZ077']);
+  assert.deepEqual(buildAlertTimeline([issued, cancelledAt9pm]), []);
+});
+
+test('an alert extended or cut short carries its final times', () => {
+  const issued = message('Winter Weather Advisory', '2030-01-14T20:10:00Z', 'NEW WW.Y 0003 300115T0300Z-300115T1200Z', ['PAZ077']);
+  const shortened = message('Winter Weather Advisory', '2030-01-15T07:00:00Z', 'EXT WW.Y 0003 000000T0000Z-300115T0900Z', ['PAZ077']);
+  assert.deepEqual(summary(buildAlertTimeline([issued, shortened])), ['PAZ077 Winter Weather Advisory 01-15T03:00 to 01-15T09:00']);
+
+  const extended = message('Winter Weather Advisory', '2030-01-15T07:00:00Z', 'EXT WW.Y 0003 000000T0000Z-300115T1500Z', ['PAZ077']);
+  assert.deepEqual(summary(buildAlertTimeline([issued, extended])), ['PAZ077 Winter Weather Advisory 01-15T03:00 to 01-15T15:00']);
+});
+
+test('each zone follows its own messages: cancelled for one, upgraded for another', () => {
+  // As NWS did on 25 Nov 2026 with a Wind Advisory: continued for PAZ077,
+  // upgraded to a warning for PAZ078 before it began
+  const timeline = buildAlertTimeline([
+    message('Winter Weather Advisory', '2030-01-14T12:00:00Z', 'NEW WW.Y 0003 300115T0300Z-300115T1200Z', ['PAZ077', 'PAZ078']),
+    message('Winter Weather Advisory', '2030-01-14T18:00:00Z', 'CON WW.Y 0003 300115T0300Z-300115T1200Z', ['PAZ077']),
+    message('Winter Weather Advisory', '2030-01-14T18:00:00Z', 'UPG WW.Y 0003 300115T0300Z-300115T1200Z', ['PAZ078']),
+    message('Winter Storm Warning', '2030-01-14T18:00:00Z', 'NEW WS.W 0001 300115T0300Z-300115T1500Z', ['PAZ078'])
+  ]);
+  assert.deepEqual(summary(timeline).sort(), [
+    'PAZ077 Winter Weather Advisory 01-15T03:00 to 01-15T12:00',
+    'PAZ078 Winter Storm Warning 01-15T03:00 to 01-15T15:00'
+  ]);
+});
+
+test('test messages, other counties and repeats of the same message are left out of the timeline', () => {
+  const real = message('Winter Weather Advisory', '2030-01-14T20:10:00Z', 'NEW WW.Y 0003 300115T0300Z-300115T1200Z', ['PAZ077']);
+  const timeline = buildAlertTimeline([
+    real,
+    real, // the same message arrives in both the history and the active feed
+    message('Winter Storm Warning', '2030-01-14T20:10:00Z', 'NEW WS.W 0009 300115T0300Z-300115T1200Z', ['PAZ077'], { status: 'Test' }),
+    message('Winter Storm Warning', '2030-01-14T20:10:00Z', 'NEW WS.W 0002 300115T0300Z-300115T1200Z', ['PAZ021'])
+  ]);
+  assert.deepEqual(summary(timeline), ['PAZ077 Winter Weather Advisory 01-15T03:00 to 01-15T12:00']);
+});
+
+test('with history, alerts come back with a timeline built from both feeds', async () => {
+  const ended = message('Winter Weather Advisory', '2030-01-14T20:10:00Z', 'NEW WW.Y 0003 300115T0300Z-300115T0600Z', ['PAZ077']);
+  const active = message('Cold Weather Advisory', '2030-01-15T08:00:00Z', 'NEW CW.Y 0001 300115T0900Z-300115T1500Z', ['PAZ077'], { onset: '2030-01-15T09:00:00Z', ends: '2030-01-15T15:00:00Z' });
+
+  await withNws({ '/alerts/active': { features: [active] }, '/alerts?zone=': { features: [ended, active] } }, async requested => {
+    const result = await getAlerts({ history: true, now: new Date('2030-01-15T10:00:00Z') });
+    assert.deepEqual(result.alerts.map(a => a.event), ['Cold Weather Advisory']);
+    assert.deepEqual(summary(result.timeline), [
+      'PAZ077 Winter Weather Advisory 01-15T03:00 to 01-15T06:00',
+      'PAZ077 Cold Weather Advisory 01-15T09:00 to 01-15T15:00'
+    ]);
+    // Indiana County's own codes, the last three days
+    const historyUrl = requested.find(url => url.includes('/alerts?zone='));
+    assert.match(historyUrl, /zone=PAZ077,PAZ078,PAC063&start=2030-01-12T10:00:00\.000Z/);
+  });
+
+  // History unreadable: the active alerts still come back, with no timeline
+  await withNws({ '/alerts/active': { features: [active] } }, async () => {
+    const result = await getAlerts({ history: true });
+    assert.deepEqual(result.alerts.map(a => a.event), ['Cold Weather Advisory']);
+    assert.equal(result.timeline, null);
+  });
+
+  // Not asked for: one request, no timeline
+  await withNws({ '/alerts/active': { features: [active] } }, async requested => {
+    const result = await getAlerts();
+    assert.equal(result.timeline, null);
+    assert.equal(requested.length, 1);
   });
 });

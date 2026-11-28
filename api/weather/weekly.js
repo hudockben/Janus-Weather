@@ -1,10 +1,14 @@
 const { generateWeeklyForecast, saveWeeklyForecast, loadWeeklyForecast } = require('../_lib/weeklyForecast');
+const { tolerateBrokenCalendar } = require('../_lib/schoolCalendar');
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=600');
 
   try {
+    // A typo in the days-off file must not take the week off the page
+    tolerateBrokenCalendar();
+
     const refresh = req.query.refresh === 'true';
     let data;
 

@@ -317,11 +317,13 @@ function windMphFromText(windSpeed) {
 }
 
 // Features from the worded forecast, used only when the numeric grid is down.
+// Snow and ice come from the 7-day forecast, temperatures from the hourly one.
+// Whatever its source did not answer stays null: "no snow in the forecast" and
+// "no forecast" must not look the same.
 function featuresFromText(forecast, hourlyForecast, windows) {
-  let snowOvernightIn = 0;
-  let snowSchoolDayIn = 0;
-  let iceIn = 0;
-  let found = false;
+  let snowOvernightIn = null;
+  let snowSchoolDayIn = null;
+  let iceIn = null;
 
   for (const period of forecast?.periods || []) {
     const start = Date.parse(period.startTime);
@@ -330,13 +332,11 @@ function featuresFromText(forecast, hourlyForecast, windows) {
     const text = period.detailedForecast || period.shortForecast || '';
 
     if (overlapMs(start, end, windows.overnight) >= 3 * HOUR && !period.isDaytime) {
-      snowOvernightIn += parseSnowInches(text);
-      iceIn = Math.max(iceIn, parseIceInches(text));
-      found = true;
+      snowOvernightIn = (snowOvernightIn ?? 0) + parseSnowInches(text);
+      iceIn = Math.max(iceIn ?? 0, parseIceInches(text));
     } else if (overlapMs(start, end, windows.schoolDay) >= 3 * HOUR) {
-      snowSchoolDayIn += parseSnowInches(text);
-      iceIn = Math.max(iceIn, parseIceInches(text));
-      found = true;
+      snowSchoolDayIn = (snowSchoolDayIn ?? 0) + parseSnowInches(text);
+      iceIn = Math.max(iceIn ?? 0, parseIceInches(text));
     }
   }
 
@@ -349,13 +349,16 @@ function featuresFromText(forecast, hourlyForecast, windows) {
     const chill = calculateWindChill(period.temperature, windMphFromText(period.windSpeed));
     if (minTempF === null || period.temperature < minTempF) minTempF = period.temperature;
     if (minWindChillF === null || chill < minWindChillF) minWindChillF = chill;
-    found = true;
   }
 
-  return found ? { snowOvernightIn, snowSchoolDayIn, iceIn, minTempF, minWindChillF } : null;
+  const result = { snowOvernightIn, snowSchoolDayIn, iceIn, minTempF, minWindChillF };
+  return Object.values(result).some(value => value !== null) ? result : null;
 }
 
 // --- Main entry ----------------------------------------------------------------
+
+// Sources whose snow and cold numbers trace back to the NWS grid
+const GRID_BASED = new Set(['grid', 'grid+text', 'on-file']);
 
 const round = (value, places) => {
   if (value == null) return null;
@@ -368,15 +371,27 @@ const round = (value, places) => {
 //   targetDate  YYYY-MM-DD of the school day being forecast
 //   grid        getGridForecast() result for the place (preferred source)
 //   forecast / hourlyForecast   worded forecasts (fallback when grid is missing)
-//   alerts      getAlerts().alerts
+//   alerts      getAlerts().alerts: what is in force right now
+//   alertTimeline  getAlerts({ history: true }).timeline: when each alert of
+//               the last few days was really in force. Preferred; without it
+//               the active list is topped up from the forecast on file.
 //   zones       NWS zone codes covering the place, e.g. ['PAZ077']
 //   current     getCurrentConditions() result, used once the morning is underway
 //   onFile      features saved earlier for this same morning, if any. They
-//               supply the hours the grid has dropped and the alerts that have
-//               since run their course.
+//               supply the hours the grid has dropped, and stand in for the
+//               grid when it cannot be reached.
 //   alertsAvailable  false when the alert feed could not be read
+//
+// `source` in the result says where the snow and cold numbers came from:
+//   grid         the NWS grid for the place
+//   grid+text    the grid, with gaps filled from the worded forecast
+//   on-file      the grid could not be reached; numbers from the forecast on file
+//   text         the worded forecast alone
+//   temps-only   only temperatures could be read: nothing is known about snow
+//   observed     only the current thermometer reading
+//   none         nothing
 function buildFeatures({
-  targetDate, grid, forecast, hourlyForecast, alerts, zones, current, onFile,
+  targetDate, grid, forecast, hourlyForecast, alerts, alertTimeline, zones, current, onFile,
   alertsAvailable = true, now = new Date()
 }) {
   const windows = getWindows(targetDate);
@@ -392,7 +407,11 @@ function buildFeatures({
     minTempF: null,
     minWindChillF: null,
     commutePrecip: null,
-    alerts: withSavedAlerts(selectAlerts(alerts, windows, zones), onFile, nowMs, { feedDown: !alertsAvailable }),
+    // The history already says which alerts ran their course and which were
+    // cancelled, so nothing needs adding back from the forecast on file.
+    alerts: alertTimeline
+      ? selectAlerts(alertTimeline, windows, zones)
+      : withSavedAlerts(selectAlerts(alerts, windows, zones), onFile, nowMs, { feedDown: !alertsAvailable }),
     alertsAvailable,
     snowBlocks: [],
     iceBlocks: []
@@ -405,30 +424,29 @@ function buildFeatures({
     features.minWindChillF = minimumOver(series.windChill, windows.coldCheck) ??
       minimumOver(series.apparentTemperature, windows.coldCheck);
     features.commutePrecip = commutePrecipFromGrid(series.weather, windows.coldCheck);
-  }
 
-  // Snow and ice: what the grid still shows, plus the hours it has dropped
-  features.snowBlocks = blocksForWindow(series?.snowfallAmount, windows.overnight, onFile?.snowBlocks, nowMs);
-  features.iceBlocks = blocksForWindow(series?.iceAccumulation, windows.ice, onFile?.iceBlocks, nowMs);
-  features.snowOvernightIn = sumBlocks(features.snowBlocks);
-  features.iceIn = sumBlocks(features.iceBlocks);
+    // Snow and ice: what the grid still shows, plus the hours it has dropped
+    features.snowBlocks = blocksForWindow(series.snowfallAmount, windows.overnight, onFile?.snowBlocks, nowMs);
+    features.iceBlocks = blocksForWindow(series.iceAccumulation, windows.ice, onFile?.iceBlocks, nowMs);
+    features.snowOvernightIn = sumBlocks(features.snowBlocks);
+    features.iceIn = sumBlocks(features.iceBlocks);
 
-  if (series && (features.snowOvernightIn !== null || features.minWindChillF !== null)) {
-    features.source = 'grid';
-  }
-
-  // With the grid unreachable on the morning itself, the forecast on file is
-  // the best information left. (When the grid does answer, its own numbers
-  // stand: an older, colder forecast must not override a newer one.)
-  if (onFile && !series && nowMs > windows.overnight[0]) {
+    if (features.snowOvernightIn !== null || features.minWindChillF !== null) features.source = 'grid';
+  } else if (GRID_BASED.has(onFile?.source)) {
+    // The grid cannot be reached. The grid numbers on file for this morning
+    // are the best information left - better than the worded forecast, which
+    // is for the county seat only. (When the grid does answer, its own numbers
+    // stand: an older, colder forecast must not override a newer one.)
     for (const key of ['snowOvernightIn', 'snowSchoolDayIn', 'iceIn', 'minTempF', 'minWindChillF', 'commutePrecip']) {
-      if (features[key] === null && onFile[key] != null) features[key] = onFile[key];
+      features[key] = onFile[key] ?? null;
     }
-    if (features.snowOvernightIn !== null || features.minWindChillF !== null) features.source = 'on-file';
+    features.snowBlocks = clipToWindow(onFile.snowBlocks, windows.overnight);
+    features.iceBlocks = clipToWindow(onFile.iceBlocks, windows.ice);
+    features.source = 'on-file';
   }
 
   // The grid only carries snow and ice amounts about three days out, and can be
-  // down altogether. Fill whatever it could not answer from the worded forecast.
+  // down altogether. Fill whatever is still unknown from the worded forecast.
   if (features.snowOvernightIn === null || features.minWindChillF === null) {
     const fallback = featuresFromText(forecast, hourlyForecast, windows);
     if (fallback) {
@@ -438,7 +456,8 @@ function buildFeatures({
       if (features.commutePrecip === null) {
         features.commutePrecip = commutePrecipFromHourly(hourlyForecast, windows.coldCheck);
       }
-      features.source = features.source === 'grid' ? 'grid+text' : 'text';
+      if (features.source === 'grid') features.source = 'grid+text';
+      else if (features.source === 'none') features.source = features.snowOvernightIn !== null ? 'text' : 'temps-only';
     }
   }
 

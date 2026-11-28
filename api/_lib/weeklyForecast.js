@@ -96,7 +96,13 @@ async function generateWeeklyForecast({ now = new Date(), deadlineMs = 7000 } = 
       continue;
     }
 
-    const onFile = getForecastOnFile(dateStr);
+    // (An unreadable forecast log must not take the week off the page)
+    let onFile = {};
+    try {
+      onFile = getForecastOnFile(dateStr);
+    } catch (error) {
+      console.error('Forecast log unreadable:', error.message);
+    }
 
     // Once this morning's buses have run there is nothing left to predict, and
     // NWS has dropped the overnight hours and expired alerts from its feeds.

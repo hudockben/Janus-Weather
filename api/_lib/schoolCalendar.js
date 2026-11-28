@@ -13,34 +13,64 @@ const NON_WEATHER_CLOSURES_PATH = path.join(__dirname, 'nonWeatherClosures.json'
 // District-specific days off (in-service days, spring break, holidays that
 // vary by district) live in nonWeatherClosures.json.
 let closuresCache = null;
+let closuresError = null;
+let tolerant = false;
 
 // A missing file means no listed days off. A file that is there but cannot be
 // parsed is an error: quietly treating it as empty would switch off every
 // listed day off and let holidays be recorded as school days.
-function loadNonWeatherClosures() {
-  if (closuresCache === null) {
-    let text = null;
+function readClosuresFile(filePath = NON_WEATHER_CLOSURES_PATH) {
+  let text;
+  try {
+    text = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`nonWeatherClosures.json is not valid JSON (${error.message}). Fix the file; no days off can be read until then.`);
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error('nonWeatherClosures.json must be a list of { date, schools, reason } entries.');
+  }
+  return parsed;
+}
+
+// The listed days off. Throws if the file cannot be read - unless the website
+// has asked to carry on without it (see tolerateBrokenCalendar); `strict`
+// throws even then, and is what the logger uses before it records anything.
+function loadNonWeatherClosures({ strict = false } = {}) {
+  if (closuresCache === null && closuresError === null) {
     try {
-      text = fs.readFileSync(NON_WEATHER_CLOSURES_PATH, 'utf8');
+      closuresCache = readClosuresFile();
     } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-    }
-    if (text === null) {
-      closuresCache = [];
-    } else {
-      let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch (error) {
-        throw new Error(`nonWeatherClosures.json is not valid JSON (${error.message}). Fix the file; no days off can be read until then.`);
-      }
-      if (!Array.isArray(parsed)) {
-        throw new Error('nonWeatherClosures.json must be a list of { date, schools, reason } entries.');
-      }
-      closuresCache = parsed;
+      closuresError = error;
     }
   }
+  if (closuresError) {
+    if (tolerant && !strict) return [];
+    throw closuresError;
+  }
   return closuresCache;
+}
+
+// For the website: a typo in the days-off file must not take the forecast off
+// the page. From this call on, an unreadable file counts as an empty one and
+// only the built-in holidays are skipped. Returns what is wrong with the file,
+// or null. (The logger never calls this: it refuses to run until the file is
+// fixed, which is what brings the problem to light.)
+function tolerateBrokenCalendar() {
+  tolerant = true;
+  try {
+    loadNonWeatherClosures({ strict: true });
+    return null;
+  } catch (error) {
+    return error.message;
+  }
 }
 
 // A listed non-weather closure for this date. With no school name, only
@@ -149,6 +179,8 @@ function isWinterSeason(dateStr) {
 
 module.exports = {
   loadNonWeatherClosures,
+  readClosuresFile,
+  tolerateBrokenCalendar,
   getNonWeatherClosure,
   getFixedHoliday,
   getNonSchoolReason,
