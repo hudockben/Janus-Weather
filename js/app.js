@@ -377,7 +377,7 @@ function renderAlerts(data) {
       <h3>${alert.event}</h3>
       <p><strong>${alert.headline}</strong></p>
       ${alert.instruction ? `<p>${alert.instruction}</p>` : ''}
-      <p><small>Expires: ${new Date(alert.expires).toLocaleString()}</small></p>
+      <p><small>In effect until: ${new Date(alert.ends || alert.expires).toLocaleString()}</small></p>
     </div>
   `).join('');
 }
@@ -407,32 +407,64 @@ function renderSchoolDelay(data) {
     minimal: 'Normal Operations Expected',
     low: 'Low Risk of Delays',
     moderate: 'Moderate Risk of Delays',
-    high: 'High Risk of Delay/Closure'
+    high: 'High Risk of Delay/Closure',
+    unknown: 'Prediction Unavailable'
   };
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const forecastDate = tomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  // The server names both dates, in Eastern time: today, and the school day
+  // being forecast (the next day school is in session, which skips weekends
+  // and breaks, so Friday's forecast is for Monday). Using the viewer's own
+  // clock here would mislabel the cards for anyone in another time zone.
+  const todayIso = data.today || localIsoDate(new Date());
+  const calendarDay = iso => new Date(iso + 'T12:00:00');
+  const targetDay = data.targetDate ? calendarDay(data.targetDate) : new Date(Date.now() + 86400000);
+  const forecastDate = targetDay.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const targetRowLabel = (data.targetLabel || 'Tomorrow').toUpperCase();
 
   // Determine which probability is higher for styling
   const primaryType = data.closureProbability > data.delayProbability ? 'closure' : 'delay';
+
+  // With nothing known about that morning, or once every district has posted,
+  // there is no percentage worth showing
+  const everyonePosted = data.announcements && data.announcements.total === data.announcements.of;
+  const percent = value => (data.noData || everyonePosted ? '&ndash;' : `${value}%`);
+
+  // Districts that have already posted for the forecast morning come first:
+  // the headline must not promise a normal day above their announcements.
+  let headline = statusLabels[data.status] || data.status;
+  let headlineClass = data.status;
+  let recommendation = data.recommendation;
+  if (data.announcements) {
+    const a = data.announcements;
+    const when = data.targetLabel === 'This morning' ? 'this morning'
+      : data.targetLabel === 'Tomorrow' ? 'tomorrow' : (data.targetLabel || 'the next school day');
+    const posted = [
+      a.closures ? `${a.closures} ${a.closures === 1 ? 'closure' : 'closures'}` : '',
+      a.delays ? `${a.delays} ${a.delays === 1 ? 'delay' : 'delays'}` : ''
+    ].filter(Boolean).join(' and ');
+    headline = `${a.total} of ${a.of} districts have posted for ${when}`;
+    headlineClass = a.closures > 0 ? 'high' : 'moderate';
+    recommendation = `Posted so far: ${posted}. See each district below.` +
+      (a.total < a.of ? ' The percentages are the weather forecast for districts that have not posted.' : '');
+  }
 
   schoolDelayContainer.innerHTML = `
     <div class="delay-date">Forecast for ${forecastDate}</div>
     <div class="delay-status">
       <div class="delay-probabilities">
         <div class="delay-probability ${primaryType === 'delay' ? data.status : 'secondary'}">
-          <div class="percentage">${data.delayProbability}%</div>
+          <div class="percentage">${percent(data.delayProbability)}</div>
           <div class="label">Delay</div>
         </div>
         <div class="delay-probability ${primaryType === 'closure' ? data.status : 'secondary'}">
-          <div class="percentage">${data.closureProbability}%</div>
+          <div class="percentage">${percent(data.closureProbability)}</div>
           <div class="label">Closure</div>
         </div>
       </div>
       <div class="delay-info">
-        <div class="status-label ${data.status}">${statusLabels[data.status] || data.status}</div>
-        <div class="recommendation">${data.recommendation}</div>
+        <div class="status-label ${headlineClass}">${headline}</div>
+        <div class="recommendation">${recommendation}</div>
+        ${data.notice ? `<div class="recommendation">${data.notice}</div>` : ''}
       </div>
     </div>
 
@@ -443,17 +475,17 @@ function renderSchoolDelay(data) {
         <span class="factor-count">${data.factors?.length || 0}</span>
       </h4>
       <div id="factors-content" class="collapsible-content section-content collapsed">
-        <p class="factors-explanation">Each factor adds to the overall delay/closure probability</p>
+        <p class="factors-explanation">Listed strongest first. Each number is what that factor adds on top of the ones above it.</p>
         ${data.factors && data.factors.length > 0 ? `
           <ul>
             ${data.factors.map(f => `
               <li>
                 <span>${f.factor}</span>
-                <span class="impact">+${f.impact}%</span>
+                <span class="impact">${f.impact >= 0 ? '+' : ''}${f.impact}%</span>
               </li>
             `).join('')}
           </ul>
-        ` : '<p class="no-factors">No significant weather factors detected</p>'}
+        ` : `<p class="no-factors">${data.noData ? 'No forecast is available for this day yet' : 'No significant weather factors detected'}</p>`}
       </div>
     </div>
 
@@ -465,7 +497,7 @@ function renderSchoolDelay(data) {
           <span class="match-count">${data.historicalMatch.matchCount} matches</span>
         </h4>
         <div id="historical-content" class="collapsible-content section-content collapsed">
-          <p>Based on <strong>${data.historicalMatch.matchCount}</strong> similar past days with today's current conditions: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays</p>
+          <p>Of the <strong>${data.historicalMatch.matchCount}</strong> most similar days on record: <strong>${data.historicalMatch.closedCount}</strong> resulted in closures, <strong>${data.historicalMatch.delayCount}</strong> in delays. Records before 2026 only list days with a disruption, so this guides delay-versus-closure rather than the overall odds.</p>
           <div class="past-matches">
             ${data.historicalMatch.topMatches.map(m => `
               <div class="past-match-item">
@@ -484,26 +516,48 @@ function renderSchoolDelay(data) {
 
     <div class="delay-schools">
       ${data.schools.map(s => {
-        const statusClass = getStatusClass(s.currentStatus);
-        const statusLabel = getStatusLabel(s.currentStatus);
         const riskTierLabel = getRiskTierLabel(s.riskTier);
-        const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+        const shortDate = iso => calendarDay(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+
+        // The district's page says which day a posted delay or closure is for.
+        // "Open" just means nothing is posted, which describes today.
+        const postedForAnotherDay = s.statusDate && s.statusDate !== todayIso && s.currentStatus !== 'open';
+        const statusRowLabel = postedForAnotherDay ? shortDate(s.statusDate) : `TODAY ${shortDate(todayIso)}`;
+
+        // On a weekend, a holiday or the district's own day off, "nothing posted"
+        // does not mean school is open
+        const noSchoolToday = (data.todayNoSchool || s.noSchoolToday) && s.currentStatus === 'open';
+        const statusClass = noSchoolToday ? 'status-unknown' : getStatusClass(s.currentStatus);
+        const statusLabel = noSchoolToday ? 'No school' : getStatusLabel(s.currentStatus);
+
         return `
           <div class="school-card">
             <a href="${s.website}" target="_blank" class="school-name">${s.shortName}</a>
             <div class="school-row today-row">
-              <span class="row-label">TODAY ${todayDate}:</span>
+              <span class="row-label">${statusRowLabel}:</span>
               <span class="school-current-status ${statusClass}">${statusLabel}</span>
             </div>
             <div class="school-row tomorrow-row">
-              <span class="row-label">TOMORROW:</span>
-              <span class="school-prob delay">${s.delayProbability}% delay</span>
-              <span class="school-prob closure">${s.closureProbability}% closure</span>
-              <span class="school-risk-tier ${s.riskTier}">${riskTierLabel}</span>
+              <span class="row-label">${targetRowLabel}:</span>
+              ${s.announced ? `
+                <span class="school-current-status ${getStatusClass(s.announced)}">Announced: ${getStatusLabel(s.announced)}</span>
+              ` : s.noSchoolTarget ? `
+                <span class="school-current-status status-unknown" title="${s.noSchoolTarget}">No school</span>
+              ` : data.noData ? `
+                <span class="school-current-status status-unknown">No forecast yet</span>
+              ` : `
+                <span class="school-prob delay">${s.delayProbability}% delay</span>
+                <span class="school-prob closure">${s.closureProbability}% closure</span>
+                <span class="school-risk-tier ${s.riskTier}">${riskTierLabel}</span>
+              `}
             </div>
           </div>
         `;
       }).join('')}
+    </div>
+
+    <div class="prediction-accuracy">
+      ${renderSelfAudit(data.predictionAccuracy)}
     </div>
 
     <p class="delay-disclaimer">${data.disclaimer}</p>
@@ -511,6 +565,72 @@ function renderSchoolDelay(data) {
 
   // Attach click handlers for collapsible sections
   attachSectionToggles();
+}
+
+// YYYY-MM-DD for a date in the viewer's own time zone
+function localIsoDate(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// One-line scorecard: disruptions caught and false alarms. Each count is one
+// district on one school day.
+function describeScore(score) {
+  const caught = score.disruptions > 0
+    ? `caught ${score.caught} of ${score.disruptions} delays/closures`
+    : 'no delays or closures yet';
+  const alarms = `${score.falseAlarms} false alarm${score.falseAlarms === 1 ? '' : 's'}`;
+  return `${caught} &middot; ${alarms}`;
+}
+
+// Self-audit. Schools are open on most days, so "percent correct" would look
+// excellent for a forecast that never predicts anything. What matters is how
+// many disruptions were called ahead of time and how many calls were wrong.
+function renderSelfAudit(audit) {
+  if (!audit || audit.status !== 'active' || (!audit.current && !audit.previous)) {
+    return `
+      <div class="accuracy-header">
+        <span class="accuracy-label">Self-Audit:</span>
+        <span class="accuracy-collecting">Collecting prediction data&hellip;</span>
+      </div>
+      <div class="accuracy-detail">Results will appear after predictions are verified against actual outcomes.</div>
+    `;
+  }
+
+  const sinceDate = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const shortDate = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const current = audit.current;
+  const previous = audit.previous;
+
+  let headline;
+  let detail;
+  let barWidth = null;
+  if (current && current.disruptions > 0) {
+    headline = `${current.caught} of ${current.disruptions} caught`;
+    detail = `Since ${sinceDate(current.since)}: ${describeScore(current)} across ${current.scored} district school days`;
+    barWidth = current.hitRate;
+  } else if (current) {
+    headline = 'Tracking';
+    detail = `Current model since ${sinceDate(current.since)}: ${describeScore(current)} across ${current.scored} district school days`;
+  } else {
+    headline = 'New model';
+    detail = 'The current model has no verified predictions yet.';
+  }
+
+  return `
+    <div class="accuracy-header">
+      <span class="accuracy-label">Self-Audit:</span>
+      <span class="${current && current.disruptions > 0 ? 'accuracy-value' : 'accuracy-collecting'}">${headline}</span>
+    </div>
+    <div class="accuracy-detail">${detail}</div>
+    ${current && current.setAside > 0 ? `<div class="accuracy-detail">Not scored: ${current.setAside} closure${current.setAside === 1 ? '' : 's'} or delay${current.setAside === 1 ? '' : 's'} judged unrelated to weather (${current.setAsideDates.map(shortDate).join(', ')})</div>` : ''}
+    ${previous ? `<div class="accuracy-detail">Previous model (${sinceDate(previous.since)} &ndash; ${sinceDate(previous.through)}): ${describeScore(previous)}</div>` : ''}
+    ${barWidth !== null ? `
+      <div class="accuracy-bar-container">
+        <div class="accuracy-bar" style="width: ${barWidth}%"></div>
+      </div>
+    ` : ''}
+  `;
 }
 
 // Attach toggle handlers for collapsible sections

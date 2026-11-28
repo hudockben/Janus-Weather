@@ -1,13 +1,78 @@
-// Weather Logger - Automatically logs weather conditions and school statuses
-// to historicalData.json for continuous learning
+// Weather Logger
+//
+// Each run does three things, and is safe to run any number of times a day:
+//   1. Records today's actual school statuses with the conditions buses ran in,
+//      and revises that record if a later run sees more (a delay posted after
+//      the first read, a delay that became a closure, an early dismissal, the
+//      rest of the morning's temperatures).
+//   2. Scores the forecast that was on file for today.
+//   3. Saves (or refreshes) the forecast for the next school day.
+//
+// Nothing here assumes the run happens at a particular time. GitHub starts
+// scheduled jobs hours late, so dates are Eastern calendar dates, the morning
+// weather comes from the station's 5-9 AM record, and SchoolCast's own date
+// header decides which day a status belongs to.
 
 const fs = require('fs');
 const path = require('path');
-const { getCurrentConditions, getForecast, getAlerts } = require('./noaa');
-const { getSchoolStatuses, calculateDelayProbability, getSchoolHistoricalPrediction, INDIANA_COUNTY_SCHOOLS, SCHOOL_CODE_TO_HISTORICAL_NAME } = require('./schoolDelay');
+const { getObservedWindow } = require('./noaa');
+const {
+  getSchoolStatuses,
+  predictAllDistricts,
+  isNonWeatherRecord,
+  INDIANA_COUNTY_SCHOOLS,
+  NON_WINTER_TEMP_F
+} = require('./schoolDelay');
+const { fetchForecastInputs } = require('./schoolForecast');
+const { getWindows, selectAlerts, compactFeatures } = require('./features');
+const { easternParts } = require('./easternTime');
+const { getNonSchoolReason, getTargetSchoolDay, isWinterSeason, loadNonWeatherClosures } = require('./schoolCalendar');
 
 const HISTORICAL_DATA_PATH = path.join(__dirname, 'historicalData.json');
-const NON_WEATHER_CLOSURES_PATH = path.join(__dirname, 'nonWeatherClosures.json');
+const PREDICTION_LOG_PATH = path.join(__dirname, 'predictionLog.json');
+
+// Version 2 = Indiana County alerts + numeric NWS grid (Nov 2026).
+// Entries without a version are the original keyword model.
+const MODEL_VERSION = 2;
+
+// Districts post decisions by about 5:30 AM; before this hour today's status
+// cannot be read yet.
+const OUTCOME_READY_HOUR = 6;
+
+// A forecast made before this hour is still about this morning; after it, the
+// forecast is for the next school day.
+const FORECAST_ROLLOVER_HOUR = 3;
+
+// The station's 5-9 AM record is complete this long after 9 AM (its reports
+// reach the NWS API about half an hour late).
+const OBSERVATION_LAG_MS = 45 * 60 * 1000;
+
+// How disruptive each outcome is. A day's record only ever moves up this
+// scale: a delay that is later cleared from SchoolCast stays a delay.
+const SEVERITY = {
+  'open': 0,
+  'delay': 1,
+  'early dismissal': 1,
+  'closed': 2,
+  'flexible instruction day': 2
+};
+const isFullClosure = status => SEVERITY[status] === 2;
+
+// Forecasts that say nothing about snow or ice are not filed: no forecast at
+// all, only the current thermometer reading, or only forecast temperatures.
+// ('on-file' is not one of these: with the grid unreachable it is the numbers
+// already filed plus the alerts in force now, and a new warning must be filed.)
+const DEGRADED_SOURCES = new Set(['none', 'observed', 'temps-only']);
+
+// A night whose lowest reported visibility stayed at or above this many miles
+// had no snow falling at the airport.
+const CLEAR_VISIBILITY_MI = 6;
+
+// A morning whose low stayed at or above this is too mild for snow to settle
+// on roads or rain to freeze, whatever fell. (Wet snow closes schools at 33 F.)
+const TOO_MILD_FOR_ICE_F = 37;
+
+const HOUR_MS = 60 * 60 * 1000;
 
 // Map school codes to names used in historical data
 const SCHOOL_CODE_TO_NAME = {
@@ -19,26 +84,7 @@ const SCHOOL_CODE_TO_NAME = {
   'USD': 'United'
 };
 
-// Load non-weather closure dates (inservice days, holidays, etc.)
-function loadNonWeatherClosures() {
-  try {
-    const data = fs.readFileSync(NON_WEATHER_CLOSURES_PATH, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    return [];
-  }
-}
-
-// Check if a school has a non-weather closure on a given date
-function getNonWeatherClosure(date, schoolName) {
-  const closures = loadNonWeatherClosures();
-  return closures.find(c => {
-    if (c.date !== date) return false;
-    if (c.schools === 'all') return true;
-    if (Array.isArray(c.schools)) return c.schools.includes(schoolName);
-    return c.schools === schoolName;
-  });
-}
+const SCHOOL_NAME_FIXES = { 'Homer Center': 'Homer-Center' };
 
 // Normalize status to match historical data format
 function normalizeStatus(status) {
@@ -52,228 +98,551 @@ function normalizeStatus(status) {
   return null; // Unknown status, don't log
 }
 
-// Determine weather type from forecast text and conditions
-function determineWeatherType(forecast, currentConditions, windChill) {
-  if (!forecast || !forecast.periods) {
-    if (windChill !== null && windChill <= 10) {
-      return 'frigid temperature';
-    }
-    return null;
-  }
-
-  // Analyze the next 24-48 hours of forecast
-  const relevantText = forecast.periods.slice(0, 4)
-    .map(p => (p.detailedForecast || p.shortForecast || '').toLowerCase())
-    .join(' ');
-
-  // Check for ice/freezing conditions first (highest priority)
-  if (relevantText.includes('ice') ||
-      relevantText.includes('freezing rain') ||
-      relevantText.includes('freezing drizzle') ||
-      relevantText.includes('sleet')) {
-    return 'ice';
-  }
-
-  // Check for snow
-  if (relevantText.includes('snow') || relevantText.includes('flurries')) {
-    // Try to determine snow intensity
-    const snowMatch = relevantText.match(/(\d+)\s*(?:to\s*(\d+))?\s*inch/);
-    if (snowMatch) {
-      const amount = snowMatch[2] ? parseInt(snowMatch[2]) : parseInt(snowMatch[1]);
-      if (amount >= 6) return 'heavy snow';
-    }
-    if (relevantText.includes('heavy snow') || relevantText.includes('blizzard')) {
-      return 'heavy snow';
-    }
-    return 'snow';
-  }
-
-  // Check for extreme cold
-  if (windChill !== null && windChill <= 0) {
-    return 'frigid temperature';
-  }
-
-  // Check for wind
-  if (relevantText.includes('high wind') || relevantText.includes('strong wind')) {
-    return 'wind';
-  }
-
-  return null;
-}
-
-// Estimate snowfall from forecast text
-function estimateSnowfall(forecast) {
-  if (!forecast || !forecast.periods) return 0;
-
-  const relevantText = forecast.periods.slice(0, 4)
-    .map(p => (p.detailedForecast || p.shortForecast || '').toLowerCase())
-    .join(' ');
-
-  // Look for explicit snow amounts
-  const snowMatch = relevantText.match(/(\d+)\s*(?:to\s*(\d+))?\s*inch/);
-  if (snowMatch) {
-    // Return the higher estimate if a range is given
-    return snowMatch[2] ? parseFloat(snowMatch[2]) : parseFloat(snowMatch[1]);
-  }
-
-  // Estimate based on descriptive terms
-  if (relevantText.includes('heavy snow') || relevantText.includes('blizzard')) {
-    return 6;
-  }
-  if (relevantText.includes('moderate snow')) {
-    return 3;
-  }
-  if (relevantText.includes('light snow')) {
-    return 1.5;
-  }
-  if (relevantText.includes('snow shower')) {
-    return 1;
-  }
-  if (relevantText.includes('flurries') || relevantText.includes('dusting')) {
-    return 0.5;
-  }
-
-  return 0;
-}
-
-// Calculate wind chill
-function calculateWindChill(tempF, windMph) {
-  if (tempF === null || windMph === null) return null;
-  if (tempF > 50 || windMph <= 3) return tempF;
-
-  const windChill = 35.74 + (0.6215 * tempF) - (35.75 * Math.pow(windMph, 0.16)) +
-                    (0.4275 * tempF * Math.pow(windMph, 0.16));
-  return Math.round(windChill);
-}
-
-// Load existing historical data
-function loadHistoricalData() {
+// A missing file is an empty log. A file that exists but cannot be parsed is
+// an error: carrying on with [] would overwrite the real log on the next save.
+function loadJson(filePath) {
+  let text;
   try {
-    const data = fs.readFileSync(HISTORICAL_DATA_PATH, 'utf8');
-    return JSON.parse(data);
+    text = fs.readFileSync(filePath, 'utf8');
   } catch (error) {
-    console.error('Error loading historical data:', error);
-    return [];
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${path.basename(filePath)} is not valid JSON (${error.message}). ` +
+      'Nothing was written; repair or restore the file.');
   }
 }
 
-// Save historical data
+function loadHistoricalData() {
+  return loadJson(HISTORICAL_DATA_PATH);
+}
+
 function saveHistoricalData(data) {
   fs.writeFileSync(HISTORICAL_DATA_PATH, JSON.stringify(data, null, 2));
 }
 
-// Check if a record already exists for this school/date combination
-function recordExists(historicalData, school, date) {
-  return historicalData.some(record =>
-    record.school === school && record.date === date
+function loadPredictionLog() {
+  return loadJson(PREDICTION_LOG_PATH);
+}
+
+function savePredictionLog(log) {
+  fs.writeFileSync(PREDICTION_LOG_PATH, JSON.stringify(log, null, 2));
+}
+
+function findRecord(historicalData, school, date) {
+  return historicalData.find(record =>
+    (SCHOOL_NAME_FIXES[record.school] || record.school) === school && record.date === date
   );
 }
 
-// Check if today is in the winter school season (Nov-Mar)
-// when weather-related closures/delays are most likely
-function isWinterSeason(dateStr) {
-  const month = new Date(dateStr).getMonth(); // 0-indexed
-  return month >= 10 || month <= 2; // Nov(10), Dec(11), Jan(0), Feb(1), Mar(2)
+// --- Reading today's outcome -----------------------------------------------------
+
+// Decide what SchoolCast is telling us about one district today.
+// Returns { status } or { skip: reason, problem?: true }.
+function readTodayStatus(statusInfo, today, easternHour) {
+  if (easternHour < OUTCOME_READY_HOUR) {
+    return { skip: `Too early to read today's status (before ${OUTCOME_READY_HOUR} AM Eastern)` };
+  }
+  if (!statusInfo || statusInfo.source !== 'SchoolCast') {
+    return { skip: `No reliable status source (${statusInfo?.source || 'unavailable'})`, problem: true };
+  }
+
+  const status = normalizeStatus(statusInfo.status);
+  if (!status) {
+    return { skip: `Unknown status${statusInfo.raw ? ` "${statusInfo.raw}"` : ''}`, problem: true };
+  }
+
+  const pageDate = statusInfo.statusDate;
+  if (!pageDate) {
+    // Without the page's date there is no telling which day a status is about.
+    // That goes for "Open" too: it may be tomorrow's, or what is left after
+    // this morning's delay was cleared. Reported on every run, so a change in
+    // the page's layout cannot go unnoticed.
+    return { skip: `SchoolCast shows "${statusInfo.raw || statusInfo.status}" but its date could not be read; not recorded`, problem: true };
+  }
+  if (pageDate > today) {
+    // The page has moved on to tomorrow's announcements
+    return { skip: `SchoolCast already shows statuses for ${pageDate}; today's were missed`, problem: true };
+  }
+  if (pageDate < today && status !== 'open') {
+    // A status left up from an earlier day is not an announcement for today
+    return { skip: `SchoolCast still shows "${statusInfo.raw}" from ${pageDate}; not confirmed for today`, problem: true };
+  }
+
+  return { status };
 }
 
-// Main function to log today's weather and school statuses
+// Was this closure or delay about something other than winter weather (a day
+// off that is not in the calendar, a building problem, heat)? Such a day must
+// not be scored or learned from.
+//
+// Only outside facts decide this: what the airport recorded, alerts NWS
+// actually issued, and what the six districts did. The forecast's own snow and
+// ice numbers are deliberately not consulted - a storm the model failed to see
+// has to count as a miss, not be waved away as "no weather". When in doubt the
+// day is scored. Days that are set aside are listed in the run's output, and
+// the calendar (nonWeatherClosures.json) overrides this guess either way.
+//
+//   weather.temperature, feelsLike   the airport's 5-9 AM low and wind chill
+//   weather.observed                 false when those are forecast stand-ins
+//   weather.precipIn                 what the gauge measured since the evening before
+//   weather.minVisibilityMi          lowest visibility since the evening before
+//   weather.countyAlerts             winter alerts for any part of the county this morning
+//   pattern   'county-wide'  every district in session closed outright
+//             'isolated'     one district disrupted, all the others open
+//             null           anything else
+function classifyCause(status, weather, pattern = null) {
+  if (status === 'open') return null;
+  if (weather.temperature != null && weather.temperature >= NON_WINTER_TEMP_F) return 'non-winter';
+
+  // Winter weather disrupts districts in groups, and does not shut all six
+  // outright without so much as an advisory. Both patterns point away from
+  // weather (a local problem; a day off), but they only count when NWS issued
+  // no winter alert for the county and the airport saw no winter weather.
+  if (!pattern || !weather.observed || (weather.countyAlerts || []).length > 0) return null;
+
+  // Too mild for it, whatever fell
+  if (weather.temperature != null && weather.temperature >= TOO_MILD_FOR_ICE_F) return 'non-winter';
+
+  // Colder than that, one district on its own may be answering to its own back
+  // roads (drifting, a refreeze): that stays a weather outcome. All six closing
+  // is a day off only after a clear, dry night that was not bitterly cold. The
+  // gauge does not register snow, but falling snow always cuts visibility, so
+  // nothing measured and a clear night together mean nothing fell.
+  if (pattern !== 'county-wide') return null;
+  const clearAndDry = weather.precipIn === 0 &&
+    weather.minVisibilityMi != null && weather.minVisibilityMi >= CLEAR_VISIBILITY_MI;
+  const notBitter = weather.feelsLike != null && weather.feelsLike > 0;
+
+  return clearAndDry && notBitter ? 'non-winter' : null;
+}
+
+// What the six districts did, taken together (see classifyCause).
+// `day` lists each district as { noSchool, status }.
+function closurePattern(day) {
+  const inSession = day.filter(d => !d.noSchool);
+  const disrupted = inSession.filter(d => d.status && d.status !== 'open');
+  const open = inSession.filter(d => d.status === 'open');
+
+  if (inSession.length >= 4 && disrupted.length === inSession.length &&
+      disrupted.every(d => isFullClosure(d.status))) {
+    return 'county-wide';
+  }
+  if (disrupted.length === 1 && open.length >= 3 && open.length === inSession.length - 1) {
+    return 'isolated';
+  }
+  return null;
+}
+
+function describeType(status, cause, weather) {
+  if (cause === 'non-winter') return 'non-weather';
+  if ((weather.iceIn || 0) >= 0.01 || weather.commutePrecip === 'ice') return 'ice';
+  if ((weather.snowfall || 0) >= 6) return 'heavy snow';
+  if ((weather.snowfall || 0) >= 0.3 || weather.commutePrecip === 'snow' ||
+      weather.alerts.some(event => /winter (storm|weather)|blizzard|snow/i.test(event))) return 'snow';
+  if (weather.feelsLike != null && weather.feelsLike <= 0) return 'frigid temperature';
+  return status === 'open' ? 'normal' : 'unknown';
+}
+
+// --- Prediction log ----------------------------------------------------------------
+
+// The forecast on file for a district and date (never a backtest seed)
+function findPrediction(predictionLog, school, date) {
+  return predictionLog.find(entry =>
+    entry.date === date && entry.school === school && entry.source !== 'backtest');
+}
+
+// Features of the forecast on file for a school morning, by district code
+function getForecastOnFile(targetDate, predictionLog = loadPredictionLog()) {
+  const onFile = {};
+  for (const school of INDIANA_COUNTY_SCHOOLS) {
+    const entry = findPrediction(predictionLog, SCHOOL_CODE_TO_NAME[school.code], targetDate);
+    if (entry?.features) onFile[school.code] = entry.features;
+  }
+  return onFile;
+}
+
+// Has the forecast itself moved since it was last written down?
+function forecastChanged(existing, fields) {
+  return existing.modelVersion !== fields.modelVersion ||
+    existing.probability !== fields.probability ||
+    existing.closureProbability !== fields.closureProbability;
+}
+
+// Snow or ice per three-hour stretch of the clock, from saved [start, end,
+// amount] blocks. Two forecasts can be compared this way however their periods
+// happen to be cut.
+function amountsByStretch(blocks) {
+  const span = 3 * HOUR_MS;
+  const totals = new Map();
+  for (const [start, end, amount] of blocks || []) {
+    if (!amount || !(end > start)) continue;
+    for (let bin = Math.floor(start / span); bin * span < end; bin++) {
+      const overlap = Math.min(end, (bin + 1) * span) - Math.max(start, bin * span);
+      if (overlap > 0) totals.set(bin, (totals.get(bin) || 0) + amount * (overlap / (end - start)));
+    }
+  }
+  return totals;
+}
+
+// Has the snow or ice moved in time by `tolerance` inches or more in any
+// three-hour stretch?
+function timingMoved(savedBlocks, newBlocks, tolerance) {
+  const saved = amountsByStretch(savedBlocks);
+  const fresh = amountsByStretch(newBlocks);
+  for (const bin of new Set([...saved.keys(), ...fresh.keys()])) {
+    if (Math.abs((saved.get(bin) || 0) - (fresh.get(bin) || 0)) >= tolerance) return true;
+  }
+  return false;
+}
+
+// Have the inputs worth keeping current moved, with the forecast unchanged?
+// Alert end times and per-period snow are what a later run needs in order to
+// account for hours and alerts NWS has since dropped. The periods matter as
+// much as the total: if NWS moves the same snow from the evening to the early
+// morning, stale periods on file would be added to the new ones later on.
+function inputsChanged(existing, fields) {
+  const key = features => JSON.stringify([
+    features?.alerts, features?.alertEnds, features?.snowOvernightIn, features?.iceIn
+  ]);
+  return key(existing.features) !== key(fields.features) ||
+    timingMoved(existing.features?.snowBlocks, fields.features.snowBlocks, 0.2) ||
+    timingMoved(existing.features?.iceBlocks, fields.features.iceBlocks, 0.02);
+}
+
+// Save the forecast for `targetDate`, replacing an earlier forecast for the
+// same morning when it has changed. Earlier versions are kept in `history` so
+// accuracy can later be compared by how far ahead the forecast was made.
+//
+//   onlyNew  file a forecast only where none is on file yet (used when the
+//            alert feed is down: a forecast made without alerts is better than
+//            none, but must not replace one made with them)
+//
+// Returns how many entries were written.
+function saveForecast(predictionLog, forecast, schoolStatuses, now, { onlyNew = false } = {}) {
+  let saved = 0;
+  for (const district of forecast.districts) {
+    // A "forecast" with no snow forecast behind it (NWS unreachable) must
+    // never replace a real one, or be filed as one.
+    if (DEGRADED_SOURCES.has(district.features.source)) continue;
+
+    const school = SCHOOL_CODE_TO_NAME[district.school.code];
+    const existing = findPrediction(predictionLog, school, forecast.targetDate);
+    if (existing && existing.actualStatus !== null) continue; // already scored
+    if (existing && onlyNew) continue;
+
+    const fields = {
+      delayProbability: district.delayProbability,
+      closureProbability: district.closureProbability,
+      probability: district.probability,
+      predictedDisruption: district.predictedDisruption,
+      madeAt: new Date(now).toISOString(),
+      leadHours: district.features.leadHours,
+      modelVersion: MODEL_VERSION,
+      features: compactFeatures(district.features)
+    };
+
+    // If the district has already announced for that morning, note it: the
+    // forecast is still scored on the weather, but it was no longer a guess.
+    // Only a successful SchoolCast read can set or clear the note.
+    const posted = schoolStatuses[district.school.code];
+    const canSeeAnnouncements = posted?.source === 'SchoolCast';
+    const announcedStatus = posted?.statusDate === forecast.targetDate ? normalizeStatus(posted.status) : null;
+    const announced = announcedStatus && announcedStatus !== 'open' ? announcedStatus : undefined;
+
+    if (!existing) {
+      const entry = { date: forecast.targetDate, school, ...fields, actualStatus: null, correct: null };
+      if (announced) entry.announcedBeforeForecast = announced;
+      predictionLog.push(entry);
+      saved++;
+      continue;
+    }
+
+    let written = false;
+    if (forecastChanged(existing, fields)) {
+      if (existing.madeAt) {
+        existing.history = [...(existing.history || []), {
+          madeAt: existing.madeAt,
+          probability: existing.probability
+        }].slice(-6);
+      }
+      Object.assign(existing, fields);
+      written = true;
+    } else if (inputsChanged(existing, fields)) {
+      // Same forecast, fresher inputs: keep its original timestamp
+      existing.features = fields.features;
+      written = true;
+    }
+    // (An unchanged forecast is left alone, so repeated runs on a quiet day
+    // write nothing.)
+
+    if (canSeeAnnouncements && existing.announcedBeforeForecast !== announced) {
+      if (announced) existing.announcedBeforeForecast = announced;
+      else delete existing.announcedBeforeForecast;
+      written = true;
+    }
+
+    if (written) saved++;
+  }
+  return saved;
+}
+
+// Score the forecasts on file for today against what actually happened.
+// Safe to repeat: if a later run revises the day's record (a status posted
+// after the first read, a closure reclassified), the score follows it.
+// Returns how many entries were scored or re-scored.
+function resolvePredictions(predictionLog, outcomes, today) {
+  let resolved = 0;
+  for (const entry of predictionLog) {
+    if (entry.date !== today || entry.source === 'backtest') continue;
+
+    const noSchool = getNonSchoolReason(today, entry.school);
+    if (noSchool) {
+      if (entry.actualStatus !== 'no school') {
+        entry.actualStatus = 'no school';
+        entry.excluded = noSchool;
+        entry.correct = null;
+        resolved++;
+      }
+      continue;
+    }
+
+    const outcome = outcomes[entry.school];
+    if (!outcome || !outcome.status) continue;
+
+    // A scored day never moves back down (see SEVERITY)
+    if (entry.actualStatus !== null && SEVERITY[outcome.status] < (SEVERITY[entry.actualStatus] ?? 0)) continue;
+
+    const excluded = outcome.cause === 'non-winter' ? 'Non-weather closure' : undefined;
+    const correct = excluded ? null : entry.predictedDisruption === (outcome.status !== 'open');
+    if (entry.actualStatus === outcome.status && entry.excluded === excluded && entry.correct === correct) continue;
+
+    entry.actualStatus = outcome.status;
+    entry.correct = correct;
+    if (excluded) entry.excluded = excluded;
+    else delete entry.excluded;
+    resolved++;
+  }
+  return resolved;
+}
+
+// --- Main ----------------------------------------------------------------------------
+
 async function logWeatherData(options = {}) {
   const {
-    forceLog = false,  // If true, log even if schools are open (for testing)
-    dryRun = false     // If true, don't actually write to file
+    forceLog = false,  // If true, log open days outside winter too (for testing)
+    dryRun = false,    // If true, don't actually write to file
+    now = new Date()
   } = options;
 
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  // Where the data comes from, and where the two logs are kept. Tests replace
+  // these to replay a specific morning without touching the real files.
+  const sources = { fetchForecastInputs, getSchoolStatuses, getObservedWindow, ...options.sources };
+  const store = { loadHistoricalData, saveHistoricalData, loadPredictionLog, savePredictionLog, ...options.store };
+
+  const eastern = easternParts(now);
+  const today = eastern.dateStr;
+  const windows = getWindows(today);
   const results = {
     date: today,
     logged: [],
+    updated: [],
     skipped: [],
     errors: []
   };
 
   try {
-    // Fetch all required data in parallel (with error handling for each)
-    const [currentConditions, forecast, alerts, schoolStatuses] = await Promise.all([
-      getCurrentConditions('indiana').catch(err => {
-        results.errors.push({ type: 'weather_fetch', message: err.message });
-        return null;
-      }),
-      getForecast('indiana').catch(err => {
-        results.errors.push({ type: 'forecast_fetch', message: err.message });
-        return null;
-      }),
-      getAlerts().catch(err => {
-        results.errors.push({ type: 'alerts_fetch', message: err.message });
-        return { alerts: [] };
-      }),
-      getSchoolStatuses().catch(err => {
+    // Read the calendar and both logs before anything else: if any of them is
+    // unreadable the run stops here, with nothing fetched and nothing written.
+    loadNonWeatherClosures({ strict: true });
+    const historicalData = store.loadHistoricalData();
+    const predictionLog = store.loadPredictionLog();
+
+    const nowMs = new Date(now).getTime();
+    const morningHasBegun = nowMs > windows.coldCheck[0];
+    // Only after 9 AM (plus the station's reporting lag) is the 5-9 AM record whole
+    const morningIsComplete = nowMs >= windows.coldCheck[1] + OBSERVATION_LAG_MS;
+
+    const [inputs, schoolStatuses, morningObs] = await Promise.all([
+      sources.fetchForecastInputs(),
+      sources.getSchoolStatuses().catch(err => {
         results.errors.push({ type: 'school_status_fetch', message: err.message });
         return {};
-      })
+      }),
+      morningHasBegun
+        ? sources.getObservedWindow('indiana', ...windows.coldCheck, { precipFromMs: windows.overnight[0] }).catch(err => {
+          results.errors.push({ type: 'morning_observations_fetch', message: err.message });
+          return null;
+        })
+        : null
     ]);
+    results.errors.push(...inputs.errors);
 
-    // If we couldn't get any weather data, we can still proceed with school statuses
-    if (!currentConditions && !forecast) {
-      results.errors.push({
-        type: 'no_weather_data',
-        message: 'Could not fetch weather data from NOAA'
-      });
-    }
+    const outcomes = {};
+    const readAt = `${String(eastern.hour).padStart(2, '0')}:${String(eastern.minute).padStart(2, '0')}`;
 
-    // Calculate weather metrics (with null safety)
-    const tempF = currentConditions?.temperature?.fahrenheit ?? null;
-    const windMph = currentConditions?.windSpeed?.mph || 0;
-    const windChill = calculateWindChill(tempF, windMph);
-    const snowfall = estimateSnowfall(forecast);
-    const weatherType = determineWeatherType(forecast, currentConditions, windChill);
-
-    // Load existing historical data
-    const historicalData = loadHistoricalData();
-
-    // Process each school
-    for (const school of INDIANA_COUNTY_SCHOOLS) {
+    // --- 1. Today's outcomes ---
+    //
+    // First pass: what each district's status for today is right now - the
+    // record already on file, moved up if SchoolCast now shows something more
+    // disruptive.
+    const day = INDIANA_COUNTY_SCHOOLS.map(school => {
       const schoolName = SCHOOL_CODE_TO_NAME[school.code];
-      const statusInfo = schoolStatuses[school.code];
-      const normalizedStatus = normalizeStatus(statusInfo?.status);
+      const existing = findRecord(historicalData, schoolName, today);
+      const noSchool = getNonSchoolReason(today, schoolName);
+      const reading = noSchool
+        ? { skip: `Not a school day: ${noSchool}` }
+        : readTodayStatus(schoolStatuses[school.code], today, eastern.hour);
 
-      // Skip if:
-      // 1. Record already exists for this school/date
-      // 2. Status is 'open' (we only log disruptions unless forceLog is true)
-      // 3. Status is unknown/null
-      if (recordExists(historicalData, schoolName, today)) {
-        results.skipped.push({
-          school: schoolName,
-          reason: 'Record already exists for today'
-        });
+      let status = existing ? existing.status : reading.status ?? null;
+      const revisable = existing && existing.v === 2;
+      if (revisable && reading.status && SEVERITY[reading.status] > (SEVERITY[existing.status] ?? 0)) {
+        status = reading.status;
+      }
+      return { school, schoolName, existing, revisable, noSchool, reading, status };
+    });
+
+    // What the districts did taken together, and every winter alert for the
+    // county this morning: live, on file with a forecast, or already recorded.
+    // (Used to tell a day off or a local problem from a storm.)
+    const pattern = closurePattern(day);
+    const alertSource = inputs.alertTimeline || inputs.alerts;
+    const countyAlerts = [...new Set([
+      ...selectAlerts(alertSource, windows).map(a => a.event),
+      ...day.flatMap(d => d.existing?.alerts || []),
+      ...day.flatMap(d => (findPrediction(predictionLog, d.schoolName, today)?.features?.alerts || [])
+        .map(label => label.split('@')[0]))
+    ])];
+
+    let historyChanged = false;
+    for (const d of day) {
+      const { school, schoolName, existing, reading } = d;
+
+      // Weekends, holidays and listed days off (in-service days etc.) are not
+      // school days: nothing to record, and no weather lesson in the closure.
+      if (d.noSchool && !existing) {
+        results.skipped.push({ school: schoolName, reason: reading.skip });
         continue;
       }
 
-      // Skip non-weather closures (inservice days, holidays, etc.)
-      // These would skew the data by associating weather conditions with
-      // closures that had nothing to do with weather
-      const nonWeatherClosure = getNonWeatherClosure(today, schoolName);
-      if (nonWeatherClosure) {
-        results.skipped.push({
-          school: schoolName,
-          reason: `Non-weather closure: ${nonWeatherClosure.reason}`
-        });
+      // Conditions buses ran in: the station's 5-9 AM record, the forecast that
+      // was on file for this morning, and alerts covering the district.
+      const onFile = findPrediction(predictionLog, schoolName, today)?.features || {};
+      const liveAlerts = selectAlerts(alertSource, windows, school.zones).map(a => a.event);
+      const filedAlerts = (onFile.alerts || []).map(label => label.split('@')[0]);
+      const alerts = [...new Set([...(existing?.alerts || []), ...filedAlerts, ...liveAlerts])];
+      const forecastWeather = {
+        snowfall: onFile.snowOvernightIn ?? 0,
+        iceIn: onFile.iceIn ?? 0,
+        commutePrecip: onFile.commutePrecip ?? null
+      };
+
+      // --- A record from an earlier run today: revise it if there is news ---
+      if (existing) {
+        if (d.revisable) {
+          const changes = [];
+          if (d.status !== existing.status) {
+            changes.push(`status ${existing.status} -> ${d.status}`);
+            existing.status = d.status;
+            existing.readAt = readAt;
+          }
+
+          // The first read usually lands before 9 AM, with only part of the
+          // morning observed (or none: then the forecast's low stood in).
+          if (existing.obs && morningObs && (morningIsComplete || existing.obs === 'forecast')) {
+            const feelsLike = morningObs.minWindChillF ?? morningObs.minTempF;
+            const obs = morningIsComplete ? undefined : 'partial';
+            if (existing.temperature !== morningObs.minTempF || existing.feelsLike !== feelsLike) {
+              changes.push(`morning low ${existing.temperature}F -> ${morningObs.minTempF}F`);
+            } else if (existing.obs !== obs) {
+              // Same numbers, but they are no longer provisional
+              changes.push(obs ? 'morning low now from the station' : 'morning record complete');
+            }
+            existing.temperature = morningObs.minTempF;
+            existing.feelsLike = feelsLike;
+            if (obs) existing.obs = obs;
+            else delete existing.obs;
+          }
+
+          const weather = {
+            ...forecastWeather,
+            temperature: existing.temperature,
+            feelsLike: existing.feelsLike,
+            observed: existing.obs !== 'forecast',
+            precipIn: morningObs?.precipIn ?? null,
+            minVisibilityMi: morningObs?.minVisibilityMi ?? null,
+            alerts,
+            countyAlerts
+          };
+          // Without the station's record this run has nothing new to judge
+          // the cause by; the earlier call stands.
+          const cause = morningObs
+            ? classifyCause(existing.status, weather, pattern)
+            : (existing.cause || null);
+          const type = describeType(existing.status, cause, weather);
+          if ((existing.cause || null) !== cause || existing.type !== type) {
+            if (changes.length === 0) changes.push(`type ${existing.type} -> ${type}`);
+            if (cause) existing.cause = cause;
+            else delete existing.cause;
+            existing.type = type;
+          }
+          if (alerts.length > 0 && (existing.alerts || []).length !== alerts.length) {
+            existing.alerts = alerts;
+            if (changes.length === 0) changes.push('alerts updated');
+          }
+
+          if (changes.length > 0) {
+            historyChanged = true;
+            results.updated.push({ school: schoolName, changes });
+          }
+        }
+
+        outcomes[schoolName] = {
+          status: existing.status,
+          cause: isNonWeatherRecord(existing) ? 'non-winter' : null
+        };
+        if (!results.updated.some(u => u.school === schoolName)) {
+          results.skipped.push({ school: schoolName, reason: 'Record already exists for today' });
+        }
         continue;
       }
 
-      if (!normalizedStatus) {
-        results.skipped.push({
-          school: schoolName,
-          reason: 'Unknown status'
-        });
+      // --- No record yet today ---
+      if (reading.skip) {
+        results.skipped.push({ school: schoolName, reason: reading.skip });
+        if (reading.problem) {
+          results.errors.push({ type: 'status_not_recorded', message: `${schoolName}: ${reading.skip}` });
+        }
         continue;
       }
+
+      const weather = {
+        ...forecastWeather,
+        temperature: morningObs?.minTempF ?? onFile.minTempF ?? null,
+        feelsLike: morningObs?.minWindChillF ?? onFile.minWindChillF ?? null,
+        observed: Boolean(morningObs),
+        precipIn: morningObs?.precipIn ?? null,
+        minVisibilityMi: morningObs?.minVisibilityMi ?? null,
+        alerts,
+        countyAlerts
+      };
+
+      if (weather.temperature === null) {
+        results.skipped.push({ school: schoolName, reason: 'No morning weather observations available' });
+        results.errors.push({ type: 'status_not_recorded', message: `${schoolName}: no morning weather observations` });
+        continue;
+      }
+
+      const cause = classifyCause(reading.status, weather, pattern);
+      outcomes[schoolName] = { status: reading.status, cause };
 
       // During winter season (Nov-Mar), log ALL days including open days
-      // so the prediction model has baseline data for normal vs. disruption days.
+      // so there is baseline data for normal vs. disruption days.
       // Outside winter season, only log disruptions (or if forceLog is set).
-      const winterSeason = isWinterSeason(today);
-
-      if (normalizedStatus === 'open' && !winterSeason && !forceLog) {
+      if (reading.status === 'open' && !isWinterSeason(today) && !forceLog) {
         results.skipped.push({
           school: schoolName,
           reason: 'School is open (outside winter season, no disruption to log)'
@@ -281,37 +650,108 @@ async function logWeatherData(options = {}) {
         continue;
       }
 
-      // Create the record
       const record = {
         school: schoolName,
         date: today,
-        status: normalizedStatus,
-        temperature: tempF || 32, // Default to freezing if unavailable
-        snowfall: snowfall,
-        type: weatherType || (normalizedStatus !== 'open' ? 'unknown' : 'normal'),
-        feelsLike: windChill || tempF || 32
+        status: reading.status,
+        temperature: weather.temperature,
+        snowfall: weather.snowfall,
+        type: describeType(reading.status, cause, weather),
+        feelsLike: weather.feelsLike ?? weather.temperature,
+        v: 2,
+        // Eastern time the status was read. A morning delay can be cleared
+        // from SchoolCast by afternoon, so a late "open" is less certain.
+        readAt
       };
+      // Where the morning low came from, until the full 5-9 AM record is in:
+      // 'partial' = the station's readings so far, 'forecast' = no readings yet.
+      if (!morningObs) record.obs = 'forecast';
+      else if (!morningIsComplete) record.obs = 'partial';
+      if (cause) record.cause = cause;
+      if (weather.alerts.length > 0) record.alerts = weather.alerts;
 
-      if (!dryRun) {
-        historicalData.push(record);
-      }
+      historicalData.push(record);
+      historyChanged = true;
       results.logged.push(record);
     }
 
-    // Save if any records were logged
-    if (results.logged.length > 0 && !dryRun) {
-      saveHistoricalData(historicalData);
+    if (historyChanged && !dryRun) {
+      store.saveHistoricalData(historicalData);
     }
+
+    // --- 2. Score today's forecast, 3. save the next one ---
+    try {
+      const resolved = resolvePredictions(predictionLog, outcomes, today);
+
+      const targetDate = getTargetSchoolDay(now, { cutoffHour: FORECAST_ROLLOVER_HOUR });
+      const forecast = predictAllDistricts(inputs, {
+        now,
+        targetDate,
+        onFile: getForecastOnFile(targetDate, predictionLog)
+      });
+
+      let saved = 0;
+      if (forecast.noData && forecast.noDataReason === 'beyond-range') {
+        // Normal during a break: the next school day is more than a week out.
+        // Nothing to file until NWS forecasts reach it.
+      } else if (forecast.noData) {
+        results.errors.push({
+          type: 'no_weather_data',
+          message: 'Could not fetch alerts or forecasts from NOAA; no forecast saved'
+        });
+      } else if (!inputs.alertsAvailable) {
+        // Without the alert feed the forecast would quietly lose its strongest
+        // signal. Whatever is on file stays as it is until the feed is back;
+        // only a morning with nothing on file yet gets this forecast.
+        saved = saveForecast(predictionLog, forecast, schoolStatuses, now, { onlyNew: true });
+        results.errors.push({
+          type: 'alerts_unavailable',
+          message: 'NWS alerts could not be fetched; any forecast already on file was left unchanged'
+        });
+      } else {
+        saved = saveForecast(predictionLog, forecast, schoolStatuses, now);
+      }
+
+      if (!dryRun) {
+        store.savePredictionLog(predictionLog);
+      }
+
+      results.predictions = {
+        resolved,
+        targetDate,
+        savedForTarget: saved,
+        forecast: forecast.districts.map(d => ({
+          school: SCHOOL_CODE_TO_NAME[d.school.code],
+          probability: d.probability,
+          delayProbability: d.delayProbability,
+          closureProbability: d.closureProbability,
+          factors: d.factors.map(f => f.factor)
+        }))
+      };
+    } catch (error) {
+      results.errors.push({ type: 'prediction_tracking', message: error.message });
+    }
+
+    const liveAlertNames = [...new Set(INDIANA_COUNTY_SCHOOLS.flatMap(school =>
+      selectAlerts(alertSource, windows, school.zones).map(a => a.event)))];
+
+    // Closures and delays on file for today that are being left out of the
+    // scorecard as not weather-related. Listed so the call can be checked.
+    results.setAside = historicalData
+      .filter(record => record.date === today && record.status !== 'open' && isNonWeatherRecord(record))
+      .map(record => ({ school: SCHOOL_NAME_FIXES[record.school] || record.school, status: record.status }));
 
     results.summary = {
       totalSchools: INDIANA_COUNTY_SCHOOLS.length,
       recorded: results.logged.length,
+      updated: results.updated.length,
       skipped: results.skipped.length,
       weatherConditions: {
-        temperature: tempF,
-        windChill: windChill,
-        snowfall: snowfall,
-        type: weatherType
+        temperature: morningObs?.minTempF ?? null,
+        windChill: morningObs?.minWindChillF ?? null,
+        snowfall: results.logged[0]?.snowfall ?? 0,
+        type: results.logged[0]?.type ?? null,
+        alerts: liveAlertNames
       },
       dryRun: dryRun
     };
@@ -327,6 +767,139 @@ async function logWeatherData(options = {}) {
   }
 }
 
+// --- Scorecard -----------------------------------------------------------------------
+//
+// Disruptions are rare, so "percent of days called correctly" rewards a model
+// that always says "open". The scorecard instead counts what matters:
+//   caught        disruption forecast, disruption happened
+//   missed        no disruption forecast, disruption happened
+//   false alarms  disruption forecast, school was open
+// Quiet days called correctly are counted but never inflate the headline.
+
+function tally(entries) {
+  const counts = { caught: 0, missed: 0, falseAlarms: 0, quietDaysCorrect: 0 };
+  for (const entry of entries) {
+    const disrupted = entry.actualStatus !== 'open';
+    if (disrupted && entry.predictedDisruption) counts.caught++;
+    else if (disrupted) counts.missed++;
+    else if (entry.predictedDisruption) counts.falseAlarms++;
+    else counts.quietDaysCorrect++;
+  }
+
+  const disruptions = counts.caught + counts.missed;
+  const calls = counts.caught + counts.falseAlarms;
+  const dates = entries.map(e => e.date).sort();
+
+  // Brier score on winter-season days: average squared gap between the stated
+  // chance and what happened (0 is perfect). Skill compares it with always
+  // quoting the season's average rate; above 0 means the forecast adds value.
+  const winter = entries.filter(e => isWinterSeason(e.date));
+  let brier = null;
+  let brierSkill = null;
+  if (winter.length > 0) {
+    const outcome = e => (e.actualStatus !== 'open' ? 1 : 0);
+    const stated = e => Math.min(100, e.probability ?? (e.delayProbability + e.closureProbability)) / 100;
+    brier = winter.reduce((sum, e) => sum + Math.pow(stated(e) - outcome(e), 2), 0) / winter.length;
+    const baseRate = winter.reduce((sum, e) => sum + outcome(e), 0) / winter.length;
+    const reference = baseRate * (1 - baseRate);
+    brierSkill = reference > 0 ? Math.round((1 - brier / reference) * 100) / 100 : null;
+    brier = Math.round(brier * 1000) / 1000;
+  }
+
+  return {
+    scored: entries.length,
+    disruptions,
+    ...counts,
+    hitRate: disruptions > 0 ? Math.round((counts.caught / disruptions) * 100) : null,
+    falseAlarmRatio: calls > 0 ? Math.round((counts.falseAlarms / calls) * 100) : null,
+    since: dates[0] || null,
+    through: dates[dates.length - 1] || null,
+    winterDaysScored: winter.length,
+    brier,
+    brierSkill
+  };
+}
+
+// Live forecasts that have a verified outcome worth scoring: not backtest
+// seeds, not non-school days, not closures unrelated to weather.
+function getScorableEntries(log = loadPredictionLog(), historicalData = loadHistoricalData()) {
+  // Outcome records, to recognize non-weather closures among older entries
+  const history = new Map(historicalData.map(record =>
+    [`${record.date}:${SCHOOL_NAME_FIXES[record.school] || record.school}`, record]));
+
+  return log.filter(entry => {
+    if (entry.source === 'backtest') return false;
+    if (typeof entry.correct !== 'boolean' || entry.excluded) return false;
+    // Entries from before the calendar existed: drop non-school days and
+    // closures that had nothing to do with weather
+    if (getNonSchoolReason(entry.date, entry.school)) return false;
+    const record = history.get(`${entry.date}:${entry.school}`);
+    return !(record && isNonWeatherRecord(record));
+  });
+}
+
+// Get prediction accuracy stats. The arguments exist for tests; the site
+// calls this with none and gets the real logs and today's date.
+function getPredictionAccuracy({ log, historicalData, today = easternParts().dateStr } = {}) {
+  try {
+    log = log || loadPredictionLog();
+    historicalData = historicalData || loadHistoricalData();
+  } catch (error) {
+    // The page still has a forecast to show; the self-audit just has no data
+    return { total: 0, correct: 0, accuracy: 0, status: 'no-data', pendingCount: 0, totalResolved: 0, error: error.message };
+  }
+
+  const live = log.filter(e => e.source !== 'backtest');
+  const scorable = getScorableEntries(log, historicalData);
+  const pending = live.filter(e => e.actualStatus === null && e.date >= today);
+
+  if (scorable.length === 0) {
+    return {
+      total: 0,
+      correct: 0,
+      accuracy: 0,
+      status: pending.length > 0 ? 'collecting' : 'no-data',
+      pendingCount: pending.length,
+      totalResolved: 0
+    };
+  }
+
+  const currentEntries = scorable.filter(e => e.modelVersion === MODEL_VERSION);
+  const previousEntries = scorable.filter(e => e.modelVersion !== MODEL_VERSION);
+
+  // Closures and delays the current model was not scored on because they were
+  // judged unrelated to weather. Shown with the scorecard so the judgment can
+  // be checked rather than taken on trust.
+  const setAside = live.filter(e => e.modelVersion === MODEL_VERSION && e.excluded === 'Non-weather closure');
+  const current = currentEntries.length > 0 ? tally(currentEntries) : null;
+  if (current) {
+    current.setAside = setAside.length;
+    current.setAsideDates = [...new Set(setAside.map(e => e.date))].sort();
+  }
+
+  // Fields the original self-audit display reads (last 30 scored predictions)
+  const recent = scorable.slice(-30);
+  const correctCount = recent.filter(e => e.correct).length;
+  let streak = 0;
+  for (let i = scorable.length - 1; i >= 0 && scorable[i].correct; i--) streak++;
+
+  return {
+    status: 'active',
+    modelVersion: MODEL_VERSION,
+    current,
+    previous: previousEntries.length > 0 ? tally(previousEntries) : null,
+    total: recent.length,
+    correct: correctCount,
+    accuracy: Math.round((correctCount / recent.length) * 100),
+    streak,
+    lastResolvedDate: scorable[scorable.length - 1].date,
+    pendingCount: pending.length,
+    totalResolved: scorable.length,
+    liveCount: recent.length,
+    backtestCount: 0
+  };
+}
+
 // Get logging status (check what would be logged without actually logging)
 async function getLoggingPreview() {
   return logWeatherData({ dryRun: true, forceLog: true });
@@ -335,6 +908,18 @@ async function getLoggingPreview() {
 module.exports = {
   logWeatherData,
   getLoggingPreview,
+  loadJson,
   loadHistoricalData,
-  SCHOOL_CODE_TO_NAME
+  getPredictionAccuracy,
+  normalizeStatus,
+  readTodayStatus,
+  classifyCause,
+  closurePattern,
+  resolvePredictions,
+  saveForecast,
+  getScorableEntries,
+  getForecastOnFile,
+  tally,
+  SCHOOL_CODE_TO_NAME,
+  MODEL_VERSION
 };

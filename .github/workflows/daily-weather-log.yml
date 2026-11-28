@@ -1,15 +1,25 @@
 name: Daily Weather Logger
 
 on:
-  # Run every weekday at 7:30 AM EST (12:30 UTC)
+  # Every three hours, every day.
+  #
+  # GitHub starts scheduled jobs late, and by a varying amount: the old single
+  # 7:30 AM run started one to three hours late from February to August 2026,
+  # and between 12:30 and 7 PM Eastern from September on. The logger no longer
+  # depends on when it runs, and repeating it is harmless: a day's record is
+  # only revised when there is news, and the forecast for the next school day
+  # is only rewritten when it changes. Several runs a day means one lands in
+  # the morning to read statuses and one in the evening to capture the
+  # forecast people actually see the night before. Weekend runs keep Monday's
+  # forecast current.
   schedule:
-    - cron: '30 12 * * 1-5'
+    - cron: '17 */3 * * *'
 
   # Also allow manual trigger
   workflow_dispatch:
     inputs:
       force_log:
-        description: 'Force log even if schools are open'
+        description: 'Also log open days outside the winter season'
         required: false
         default: 'false'
         type: boolean
@@ -18,6 +28,11 @@ on:
         required: false
         default: 'false'
         type: boolean
+
+# One run at a time, so two runs never push over each other
+concurrency:
+  group: weather-log
+  cancel-in-progress: false
 
 jobs:
   log-weather:
@@ -42,7 +57,6 @@ jobs:
 
       - name: Run weather logger
         id: logger
-        continue-on-error: true
         run: |
           ARGS=""
           if [[ "${{ github.event.inputs.force_log }}" == "true" ]]; then
@@ -51,12 +65,23 @@ jobs:
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
             ARGS="$ARGS --dry-run"
           fi
+
+          # Exit 1 = finished, with problems worth a look (a source was down, a
+          # status could not be read): keep going and commit what was recorded.
+          # Exit 2 = could not run at all: nothing was written; fail the run below.
+          set +e
           node scripts/daily-weather-log.js $ARGS
+          code=$?
+          set -e
+          echo "exit_code=$code" >> $GITHUB_OUTPUT
+          if [ "$code" -eq 1 ]; then
+            echo "::warning::The weather logger finished with problems. See the 'Errors' list in this step's log."
+          fi
 
       - name: Check for changes
         id: check_changes
         run: |
-          if git diff --quiet api/_lib/historicalData.json; then
+          if git diff --quiet api/_lib/historicalData.json api/_lib/predictionLog.json; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -67,10 +92,18 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add api/_lib/historicalData.json
-          git commit -m "Auto-log weather data for $(date +%Y-%m-%d)
+          git add api/_lib/historicalData.json api/_lib/predictionLog.json
+          git commit -m "Auto-log weather data for $(TZ=America/New_York date +%Y-%m-%d)
 
           Automated daily weather and school status logging.
 
           https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           git push
+
+      # A logger that cannot run at all (unreadable data or calendar file, an
+      # unexpected error) must not look like a healthy run.
+      - name: Fail if the logger could not run
+        if: steps.logger.outputs.exit_code != '0' && steps.logger.outputs.exit_code != '1'
+        run: |
+          echo "::error::The weather logger could not run (exit ${{ steps.logger.outputs.exit_code }}). Nothing was recorded."
+          exit 1

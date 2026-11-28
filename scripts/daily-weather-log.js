@@ -2,18 +2,20 @@
 /**
  * Daily Weather Logger Script
  *
- * Run this script once daily (recommended: 7-8 AM EST during school year)
- * to automatically log weather conditions and school statuses to historicalData.json
+ * Each run records today's school statuses, scores the forecast that was on
+ * file for today, and saves the forecast for the next school day. It is safe
+ * to run several times a day: a later run only revises the day's record when
+ * there is news (a status posted since, the rest of the morning's readings)
+ * and refreshes the forecast when it has changed.
+ *
+ * Run it at least once on school-day mornings (statuses are readable from
+ * 6 AM Eastern) and once in the evening (so the forecast on file is the one
+ * people actually see the night before).
  *
  * Usage:
- *   node scripts/daily-weather-log.js              # Normal mode (log disruptions only)
- *   node scripts/daily-weather-log.js --force      # Force log even if schools are open
+ *   node scripts/daily-weather-log.js              # Normal mode
+ *   node scripts/daily-weather-log.js --force      # Also log open days outside winter
  *   node scripts/daily-weather-log.js --dry-run    # Preview without saving
- *
- * Scheduling Examples:
- *
- * Cron (Linux/Mac):
- *   0 7 * * 1-5 cd /path/to/Janus-Weather && node scripts/daily-weather-log.js
  *
  * GitHub Actions: See .github/workflows/daily-weather-log.yml
  */
@@ -23,7 +25,19 @@ const path = require('path');
 // Change to project root directory for proper module resolution
 process.chdir(path.join(__dirname, '..'));
 
-const { logWeatherData } = require('../api/_lib/weatherLogger');
+// Exit codes: 0 = clean run, 1 = finished with problems worth a look (a source
+// was down, a status could not be read), 2 = could not run at all (a data or
+// calendar file is unreadable, or an unexpected error). Nothing is written on 2.
+const EXIT_PROBLEMS = 1;
+const EXIT_FATAL = 2;
+
+let logWeatherData;
+try {
+  ({ logWeatherData } = require('../api/_lib/weatherLogger'));
+} catch (error) {
+  console.error('Fatal error while loading the logger:', error.message);
+  process.exit(EXIT_FATAL);
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -34,7 +48,7 @@ async function main() {
   console.log('Janus Weather - Daily Weather Logger');
   console.log(`Date: ${new Date().toISOString()}`);
   console.log(`Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE'}`);
-  console.log(`Force Log: ${forceLog ? 'Yes' : 'No (disruptions only)'}`);
+  console.log(`Force Log: ${forceLog ? 'Yes' : 'No'}`);
   console.log('='.repeat(60));
   console.log('');
 
@@ -42,11 +56,11 @@ async function main() {
     const result = await logWeatherData({ forceLog, dryRun });
 
     if (result.summary && result.summary.weatherConditions) {
-      console.log('Weather Conditions:');
-      console.log(`  Temperature: ${result.summary.weatherConditions.temperature ?? 'N/A'}°F`);
-      console.log(`  Wind Chill: ${result.summary.weatherConditions.windChill ?? 'N/A'}°F`);
-      console.log(`  Snowfall: ${result.summary.weatherConditions.snowfall ?? 0}"`);
-      console.log(`  Type: ${result.summary.weatherConditions.type || 'None'}`);
+      const conditions = result.summary.weatherConditions;
+      console.log('This Morning (5-9 AM at the Indiana County airport):');
+      console.log(`  Low Temperature: ${conditions.temperature ?? 'N/A'}°F`);
+      console.log(`  Low Wind Chill: ${conditions.windChill ?? 'N/A'}°F`);
+      console.log(`  Winter Alerts: ${conditions.alerts && conditions.alerts.length ? conditions.alerts.join(', ') : 'None'}`);
       console.log('');
     } else {
       console.log('Weather Conditions: Unable to fetch (network error?)');
@@ -63,6 +77,23 @@ async function main() {
     }
     console.log('');
 
+    if (result.updated && result.updated.length > 0) {
+      console.log(`Records Revised (${result.updated.length}):`);
+      result.updated.forEach(update => {
+        console.log(`  - ${update.school}: ${update.changes.join('; ')}`);
+      });
+      console.log('');
+    }
+
+    if (result.setAside && result.setAside.length > 0) {
+      console.log(`Set aside as not weather-related, so not scored (${result.setAside.length}):`);
+      result.setAside.forEach(record => {
+        console.log(`  - ${record.school}: ${record.status}`);
+      });
+      console.log('  If this was a planned day off, list it in api/_lib/nonWeatherClosures.json.');
+      console.log('');
+    }
+
     if (result.skipped.length > 0) {
       console.log(`Skipped (${result.skipped.length}):`);
       result.skipped.forEach(skip => {
@@ -71,12 +102,24 @@ async function main() {
     }
     console.log('');
 
+    if (result.predictions) {
+      const { resolved, targetDate, savedForTarget, forecast } = result.predictions;
+      console.log(`Forecasts scored for today: ${resolved}`);
+      console.log(`Forecast for ${targetDate} (${savedForTarget} saved):`);
+      forecast.forEach(f => {
+        const why = f.factors.length ? ` - ${f.factors.join('; ')}` : '';
+        console.log(`  - ${f.school}: ${f.probability}% (delay ${f.delayProbability}%, closure ${f.closureProbability}%)${why}`);
+      });
+      console.log('');
+    }
+
     if (result.errors.length > 0) {
       console.log('Errors:');
       result.errors.forEach(err => {
         console.log(`  - ${err.type}: ${err.message}`);
       });
-      process.exit(1);
+      // 'fetch_error' is the logger's catch-all for a run it had to abandon
+      process.exit(result.errors.some(err => err.type === 'fetch_error') ? EXIT_FATAL : EXIT_PROBLEMS);
     }
 
     console.log('='.repeat(60));
@@ -92,7 +135,7 @@ async function main() {
   } catch (error) {
     console.error('Fatal error:', error.message);
     console.error(error.stack);
-    process.exit(1);
+    process.exit(EXIT_FATAL);
   }
 }
 
