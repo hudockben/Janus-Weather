@@ -3,12 +3,13 @@ name: Daily Weather Logger
 on:
   # Every three hours, every day.
   #
-  # GitHub starts scheduled jobs late - the old single 7:30 AM run was actually
-  # starting between noon and 7 PM Eastern. The logger no longer depends on
-  # when it runs, and repeating it is harmless: today's statuses are recorded
-  # once (from 6 AM Eastern on school days), and the forecast for the next
-  # school day is only rewritten when it changes. Several runs a day means one
-  # lands in the morning to read statuses and one in the evening to capture the
+  # GitHub starts scheduled jobs late, and by a varying amount: the old single
+  # 7:30 AM run started one to three hours late from February to August 2026,
+  # and between 12:30 and 7 PM Eastern from September on. The logger no longer
+  # depends on when it runs, and repeating it is harmless: a day's record is
+  # only revised when there is news, and the forecast for the next school day
+  # is only rewritten when it changes. Several runs a day means one lands in
+  # the morning to read statuses and one in the evening to capture the
   # forecast people actually see the night before. Weekend runs keep Monday's
   # forecast current.
   schedule:

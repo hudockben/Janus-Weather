@@ -283,3 +283,22 @@ test('an advisory that expires at 7 AM still explains the morning at 7:05', () =
   const features = buildFeatures({ targetDate: TARGET, grid, alerts: [], now: sevenOhFive, onFile });
   assert.deepEqual(features.alerts.map(a => `${a.event}@${a.timing}`), ['Winter Weather Advisory@bus-time']);
 });
+
+test('ice and the kind of precipitation at bus time come from the grid', () => {
+  const at = types => [{ fromHour: 5, toHour: 9, types }];
+  const base = { snow: [0, 0, 0, 0], windChill: [25, 25, 25, 25, 25], temperature: [30, 30, 30, 30, 30] };
+  const features = extra => buildFeatures({ targetDate: TARGET, grid: makeGrid(TARGET, { ...base, ...extra }), alerts: [], now: eveningBefore });
+
+  // Ice is totalled from 6 PM to noon: one hour of the first block, then two blocks, then five hours of the fourth
+  assert.equal(features({ ice: [0.06, 0.05, 0.1, 0.06] }).iceIn, 0.21);
+  assert.equal(features({ ice: [0, 0, 0, 0] }).iceIn, 0);
+
+  assert.equal(features({ weather: at([{ weather: 'snow', coverage: 'likely' }]) }).commutePrecip, 'snow');
+  assert.equal(features({ weather: at([{ weather: 'snow', coverage: 'likely' }, { weather: 'freezing_rain', coverage: 'chance' }]) }).commutePrecip, 'ice');
+  assert.equal(features({ weather: at([{ weather: 'sleet', coverage: 'definite' }]) }).commutePrecip, 'ice');
+  // Rain is not a winter problem, and a slight chance is not a forecast
+  assert.equal(features({ weather: at([{ weather: 'rain', coverage: 'definite' }]) }).commutePrecip, null);
+  assert.equal(features({ weather: at([{ weather: 'snow_showers', coverage: 'slight_chance' }]) }).commutePrecip, null);
+  // Snow at noon is not snow at bus time
+  assert.equal(features({ weather: [{ fromHour: 11, toHour: 14, types: [{ weather: 'snow', coverage: 'definite' }] }] }).commutePrecip, null);
+});

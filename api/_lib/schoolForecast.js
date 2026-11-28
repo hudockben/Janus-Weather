@@ -61,5 +61,6 @@ async function getSchoolForecast({ deadlineMs, ...options } = {}) {
 
 module.exports = {
   fetchForecastInputs,
-  getSchoolForecast
+  getSchoolForecast,
+  withDeadline
 };

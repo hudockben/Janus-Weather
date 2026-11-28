@@ -99,12 +99,13 @@ function minimumOver(series, window) {
 // NWS products that actually move school decisions, with a starting weight:
 // the chance of a disruption when that product is in effect at bus time.
 //
-// Weights are provisional. They come from cross-checking archived Indiana
-// County alerts against this project's closure history: over three winters, at
-// least 19 of the 32 school mornings (59%) with a winter advisory or warning in
-// effect at bus time ended in a recorded delay or closure. The other 13 have no
-// record either way, because the history before Feb 2026 only lists disruptions.
-// Recalibrate once the prediction log holds a full winter of open and closed days.
+// Weights are provisional. They were set against archived Indiana County alerts
+// and this project's closure history: over the 2023-24 to 2025-26 winters, 18 of
+// the 28 school mornings (64%) with a winter advisory or warning in effect for
+// the bus run had a recorded delay or closure. The other 10 have no record
+// either way, because the history before Feb 2026 only lists disruptions.
+// `node scripts/backtest.js` prints that count (section 4). Recalibrate once
+// the prediction log holds a full winter of open and closed days.
 //
 // Not listed on purpose: Freeze Warning / Freeze Watch / Frost Advisory. Those
 // are growing-season notices for gardeners and farmers and have nothing to do

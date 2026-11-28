@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   parseSchoolCast, findSchoolCastEntry, classifyStatusText, scoreDisruption, calculateDelayProbability,
-  predictAllDistricts, isNonWeatherRecord
+  predictAllDistricts, isNonWeatherRecord, PREDICT_DISRUPTION_AT
 } = require('../api/_lib/schoolDelay');
 const { makeGrid, makeAlert, makeInputs } = require('./helpers');
 
@@ -202,10 +202,43 @@ test('districts on the ridges are scored against their own warning', () => {
   assert.match(last.factor, /^Higher risk in Penns Manor, United \(Winter Storm Warning/);
 });
 
-test('no data is reported as no data, not as a quiet day', () => {
-  const inputs = { ...makeInputs(), alertsAvailable: false };
-  assert.equal(predictAllDistricts(inputs, { now: eveningBefore, targetDate: TARGET }).noData, true);
-  assert.equal(predictAllDistricts(makeInputs(), { now: eveningBefore, targetDate: TARGET }).noData, false);
+test('nothing known about a morning is reported as no data, not as a quiet day', () => {
+  const quietGrid = makeGrid(TARGET, { snow: [0, 0, 0, 0], windChill: [25, 25, 25, 25], temperature: [30, 30, 30, 30] });
+
+  // A real forecast of nothing is a forecast
+  const quiet = predictAllDistricts(makeInputs({ grid: quietGrid }), { now: eveningBefore, targetDate: TARGET });
+  assert.equal(quiet.noData, false);
+  assert.equal(quiet.noDataReason, null);
+
+  // No numbers and no alert: NWS could not be reached
+  const down = predictAllDistricts(makeInputs(), { now: eveningBefore, targetDate: TARGET });
+  assert.equal(down.noData, true);
+  assert.equal(down.noDataReason, 'unavailable');
+  assert.equal(predictAllDistricts({ ...makeInputs(), alertsAvailable: false }, { now: eveningBefore, targetDate: TARGET }).noData, true);
+
+  // The same emptiness twelve days out is just the forecast horizon (e.g. over winter break)
+  const twelveDaysBefore = new Date('2030-01-03T15:00:00Z');
+  const beyond = predictAllDistricts(makeInputs(), { now: twelveDaysBefore, targetDate: TARGET });
+  assert.equal(beyond.noData, true);
+  assert.equal(beyond.noDataReason, 'beyond-range');
+
+  // An alert alone is something to go on
+  const alertOnly = predictAllDistricts(
+    makeInputs({ alerts: [makeAlert('Winter Storm Warning', '2030-01-14', 22, 34)] }),
+    { now: eveningBefore, targetDate: TARGET });
+  assert.equal(alertOnly.noData, false);
+  assert.ok(alertOnly.county.probability >= 70);
+});
+
+test('status wording: the label decides, the note only refines a closure', () => {
+  assert.equal(classifyStatusText('2 Hour Delay', 'May change to a Flexible Instruction Day - check back at 7:30'), '2-hour delay');
+  assert.equal(classifyStatusText('Closed', 'Flexible Instruction Day #2'), 'flexible instruction');
+  assert.equal(classifyStatusText('Closed', 'Virtual Academy students follow the regular schedule'), 'closed');
+  assert.equal(classifyStatusText('Opening 2 Hours Late'), '2-hour delay');
+  assert.equal(classifyStatusText('Closing Early'), 'early dismissal');
+  assert.equal(classifyStatusText('Early Dismissal 12:30'), 'early dismissal');
+  assert.equal(classifyStatusText('Open - Buses on snow routes'), 'open');
+  assert.equal(classifyStatusText('Closed - Flexible Instruction Day'), 'flexible instruction');
 });
 
 test('closures that are not about winter weather are kept out of the history', () => {
@@ -217,4 +250,66 @@ test('closures that are not about winter weather are kept out of the history', (
   assert.equal(isNonWeatherRecord(record({ date: '2026-02-09', school: 'United' })), false);
   assert.equal(isNonWeatherRecord(record({ cause: 'non-winter' })), true);
   assert.equal(isNonWeatherRecord(record({ status: 'open', temperature: 60 })), false);       // open days are always fine
+});
+
+test('a disruption is called at 50% and above, and not below', () => {
+  assert.equal(PREDICT_DISRUPTION_AT, 50);
+  // An advisory on its own is exactly a coin flip, and is called
+  const advisoryOnly = scoreDisruption({ ...quiet, alerts: [alertFeature('Winter Weather Advisory', 'storm', 'advisory', 0.5)] });
+  assert.equal(advisoryOnly.probability, 50);
+  assert.equal(advisoryOnly.predictedDisruption, true);
+  // Three inches of snow with no alert falls short
+  const snowOnly = scoreDisruption({ ...quiet, snowOvernightIn: 3 });
+  assert.equal(snowOnly.probability, 40);
+  assert.equal(snowOnly.predictedDisruption, false);
+});
+
+test('every kind of winter signal moves the forecast', () => {
+  const p = extra => scoreDisruption({ ...quiet, ...extra }).probability;
+  assert.equal(p({}), 0);
+  assert.ok(p({ snowOvernightIn: 0.5 }) > 0);
+  assert.ok(p({ snowOvernightIn: 2 }) > p({ snowOvernightIn: 0.5 }));
+  assert.ok(p({ snowOvernightIn: 4 }) > p({ snowOvernightIn: 2 }));
+  assert.ok(p({ snowOvernightIn: 8 }) > p({ snowOvernightIn: 4 }));
+  assert.ok(p({ snowSchoolDayIn: 1 }) > 0);
+  assert.ok(p({ snowSchoolDayIn: 5 }) > p({ snowSchoolDayIn: 1 }));
+  assert.ok(p({ iceIn: 0.02 }) > 0);
+  assert.ok(p({ iceIn: 0.15 }) > p({ iceIn: 0.02 }));
+  assert.ok(p({ iceIn: 0.3 }) > p({ iceIn: 0.15 }));
+  assert.ok(p({ minWindChillF: 8 }) > 0);
+  assert.ok(p({ minWindChillF: -5 }) > p({ minWindChillF: 8 }));
+  assert.ok(p({ minWindChillF: -15 }) > p({ minWindChillF: -5 }));
+  assert.ok(p({ minWindChillF: -25 }) > p({ minWindChillF: -15 }));
+  assert.ok(p({ commutePrecip: 'snow' }) > 0);
+  assert.ok(p({ commutePrecip: 'ice' }) > p({ commutePrecip: 'snow' }));
+  // and they compound
+  assert.ok(p({ snowOvernightIn: 2, minWindChillF: -5, commutePrecip: 'snow' }) > p({ snowOvernightIn: 2 }));
+});
+
+test('a district missing from the status page is reported as unknown, never as open', async () => {
+  const page = schoolCastPage('Tuesday, December 1, 2026', {
+    'Homer-Center': 'Open',
+    'Indiana Area': '2 Hour Delay',
+    'Marion Center Area': 'Open',
+    'Penns Manor Area': 'Open',
+    'Purchase Line': 'Closed'
+    // United is not listed
+  });
+  const realFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, status: 200, text: async () => page });
+  try {
+    // A fresh copy of the module, so its five-minute cache is empty
+    delete require.cache[require.resolve('../api/_lib/schoolDelay')];
+    const { getSchoolStatuses } = require('../api/_lib/schoolDelay');
+    const statuses = await getSchoolStatuses();
+    assert.equal(statuses.USD.status, 'unknown');
+    assert.equal(statuses.USD.source, 'SchoolCast');
+    assert.equal(statuses.IASD.status, '2-hour delay');
+    assert.equal(statuses.PLSD.status, 'closed');
+    assert.equal(statuses.HCSD.status, 'open');
+    assert.equal(statuses.IASD.statusDate, '2026-12-01');
+  } finally {
+    global.fetch = realFetch;
+    delete require.cache[require.resolve('../api/_lib/schoolDelay')];
+  }
 });

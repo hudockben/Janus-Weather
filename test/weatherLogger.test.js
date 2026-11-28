@@ -1,8 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  logWeatherData, loadJson, readTodayStatus, classifyCause, resolvePredictions, saveForecast, tally, MODEL_VERSION
+  logWeatherData, loadJson, readTodayStatus, classifyCause, resolvePredictions, saveForecast, tally,
+  getScorableEntries, getPredictionAccuracy, MODEL_VERSION
 } = require('../api/_lib/weatherLogger');
+const { easternToMs, addDays } = require('../api/_lib/easternTime');
 const { predictAllDistricts } = require('../api/_lib/schoolDelay');
 const { makeGrid, makeAlert, makeInputs } = require('./helpers');
 
@@ -27,11 +29,22 @@ function memoryStore(history = [], predictions = []) {
   };
 }
 
+// Staged data sources. The station refuses any request that is not for 5-9 AM
+// Eastern on the day of the run (with the gauge read from 6 PM the evening
+// before), so a logger that asked about the afternoon would fail these tests.
 function stagedSources({ inputs, statuses, morning }) {
   return {
     fetchForecastInputs: async () => inputs,
     getSchoolStatuses: async () => statuses,
-    getObservedWindow: async () => morning
+    getObservedWindow: async (location, startMs, endMs, options = {}) => {
+      const day = new Date(startMs - 5 * 3600 * 1000).toISOString().slice(0, 10);
+      const asked = new Date(startMs).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false });
+      assert.equal(location, 'indiana');
+      assert.equal(Number(asked), 5, 'observations must be requested from 5 AM Eastern');
+      assert.equal(endMs - startMs, 4 * 3600 * 1000, 'observations must cover 5 to 9 AM');
+      assert.equal(options.precipFromMs, easternToMs(addDays(day, -1), 18), 'the gauge is read from 6 PM the evening before');
+      return morning;
+    }
   };
 }
 
@@ -192,9 +205,19 @@ test('a forecast that has been scored is never overwritten', () => {
   saveForecast(log, stormForecast(TUESDAY, evening), {}, evening);
   resolvePredictions(log, { 'Indiana': { status: 'delay', cause: null } }, TUESDAY);
   const scored = { ...log.find(e => e.school === 'Indiana') };
+  assert.equal(scored.correct, true);
 
-  saveForecast(log, stormForecast(TUESDAY, new Date('2030-01-15T15:00:00Z')), {}, new Date('2030-01-15T15:00:00Z'));
+  // Later that day the forecast for the same morning would come out quite differently
+  const laterThatDay = new Date('2030-01-15T15:00:00Z');
+  const quiet = predictAllDistricts(
+    makeInputs({ grid: makeGrid(TUESDAY, { snow: [0, 0, 0, 0], windChill: [30, 30, 30, 30, 30], temperature: [34, 34, 34, 34, 34] }) }),
+    { now: laterThatDay, targetDate: TUESDAY });
+  assert.equal(quiet.districts[0].probability, 0);
+  saveForecast(log, quiet, {}, laterThatDay);
+
+  // The scored entry is untouched; the districts not yet scored do follow the new forecast
   assert.deepEqual(log.find(e => e.school === 'Indiana'), scored);
+  assert.equal(log.find(e => e.school === 'United').probability, 0);
 });
 
 test('forecasts on file for a holiday are set aside, not scored', () => {
@@ -580,4 +603,59 @@ test('a log file that cannot be parsed stops the run instead of being overwritte
   assert.equal(saved, false);
   assert.ok(result.errors.some(e => /not valid JSON/.test(e.message)));
   fs.rmSync(dir, { recursive: true });
+});
+
+// ---------- which entries reach the scorecard ----------
+
+test('the scorecard counts live, verified, weather-relevant forecasts only', () => {
+  const entry = (date, school, extra = {}) => ({
+    date, school, delayProbability: 0, closureProbability: 0, predictedDisruption: false,
+    actualStatus: 'open', correct: true, ...extra
+  });
+  const log = [
+    // Rows a one-off script once generated from known outcomes: never counted
+    entry('2026-01-20', 'Indiana', { source: 'backtest', predictedDisruption: true, actualStatus: 'closed' }),
+    entry('2026-01-21', 'Indiana', { source: 'backtest', predictedDisruption: true, actualStatus: 'delay' }),
+    // Previous model, ordinary days
+    entry('2026-03-02', 'Indiana'),
+    entry('2026-03-03', 'Indiana', { actualStatus: 'delay', correct: false }),
+    entry('2026-04-21', 'Indiana', { predictedDisruption: true, delayProbability: 33, closureProbability: 62, correct: false }),
+    // Good Friday closure, a late-August closure at 77 F, a Saturday, a summer weekday: none is a school-weather result
+    entry('2026-04-03', 'Indiana', { actualStatus: 'closed', correct: false }),
+    entry('2026-08-27', 'United', { actualStatus: 'closed', correct: false }),
+    entry('2026-03-07', 'Indiana'),
+    entry('2026-07-08', 'Indiana'),
+    // Never resolved
+    entry('2026-03-14', 'Indiana', { actualStatus: null, correct: null }),
+    // Current model
+    entry('2026-12-01', 'Indiana', { modelVersion: MODEL_VERSION, probability: 0 }),
+    entry('2026-12-02', 'Indiana', { modelVersion: MODEL_VERSION, probability: 70, predictedDisruption: true, actualStatus: 'delay' }),
+    entry('2026-12-03', 'Indiana', { modelVersion: MODEL_VERSION, probability: 0, actualStatus: 'closed', correct: null, excluded: 'Non-weather closure' }),
+    // Still to come
+    entry('2026-12-08', 'Indiana', { modelVersion: MODEL_VERSION, probability: 10, actualStatus: null, correct: null })
+  ];
+  const historicalData = [
+    { school: 'United', date: '2026-08-27', status: 'closed', temperature: 77, snowfall: 0, type: 'unknown', feelsLike: 77 },
+    { school: 'Indiana', date: '2026-03-03', status: 'delay', temperature: 36, snowfall: 0, type: 'unknown', feelsLike: 29 }
+  ];
+
+  assert.deepEqual(getScorableEntries(log, historicalData).map(e => e.date),
+    ['2026-03-02', '2026-03-03', '2026-04-21', '2026-12-01', '2026-12-02']);
+
+  const audit = getPredictionAccuracy({ log, historicalData, today: '2026-12-04' });
+  assert.equal(audit.status, 'active');
+  // The two models are kept apart, so the old one's record is never shown as the new one's
+  assert.deepEqual(
+    { scored: audit.previous.scored, caught: audit.previous.caught, missed: audit.previous.missed, falseAlarms: audit.previous.falseAlarms },
+    { scored: 3, caught: 0, missed: 1, falseAlarms: 1 });
+  assert.deepEqual(
+    { scored: audit.current.scored, caught: audit.current.caught, missed: audit.current.missed, falseAlarms: audit.current.falseAlarms },
+    { scored: 2, caught: 1, missed: 0, falseAlarms: 0 });
+  assert.equal(audit.pendingCount, 1); // only the forecast still ahead; a stale unresolved Saturday is not "pending"
+});
+
+test('with nothing scored yet the audit says so', () => {
+  const pending = [{ date: '2026-12-08', school: 'Indiana', probability: 10, predictedDisruption: false, modelVersion: MODEL_VERSION, actualStatus: null, correct: null }];
+  assert.equal(getPredictionAccuracy({ log: pending, historicalData: [], today: '2026-12-04' }).status, 'collecting');
+  assert.equal(getPredictionAccuracy({ log: [], historicalData: [], today: '2026-12-04' }).status, 'no-data');
 });

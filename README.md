@@ -8,12 +8,13 @@ morning in six districts.
 For each district the model looks at one specific school morning and reads three
 things from the National Weather Service:
 
-- **Alerts for the district's own forecast zone** that are in effect when buses
-  run. Indiana County is two zones: `PAZ077` (Indiana) and `PAZ078` (Higher
-  Elevations of Indiana, the southeast ridges). Only winter products count
-  (Winter Weather Advisory, Winter Storm Warning, Ice Storm Warning, cold
-  advisories and warnings, snow squalls). Freeze and frost notices are
-  growing-season products and are ignored.
+- **Alerts for the district's own forecast zone.** Indiana County is two zones:
+  `PAZ077` (Indiana) and `PAZ078` (Higher Elevations of Indiana, the southeast
+  ridges). An alert counts in full when it is in effect for the morning bus
+  run, and at a reduced weight when it ends overnight or begins during the
+  school day. Only winter products count (Winter Weather Advisory, Winter Storm
+  Warning, Ice Storm Warning, cold advisories and warnings, snow squalls).
+  Freeze and frost notices are growing-season products and are ignored.
 - **The numeric forecast grid** for the district: inches of snow from 6 PM the
   evening before to 8 AM, ice accumulation, and the lowest wind chill between
   5 and 9 AM. The worded forecast is only a fallback.
@@ -48,12 +49,17 @@ excellent even for a forecast that never predicts anything.
 
 - **Days off**: add in-service days, MLK Day, Presidents' Day, the rest of
   spring break and other non-weather closures to
-  `api/_lib/nonWeatherClosures.json` (`"schools": "all"` or a list of district
-  names). Built in: Thanksgiving and the Friday after, Dec 24 - Jan 1, Good
-  Friday, Easter Monday, Memorial Day, Labor Day, and June 15 - Aug 15. Days off
-  are neither forecast nor scored, and their closures stay out of the weather
-  history. A day added later is removed from the scorecard retroactively.
+  `api/_lib/nonWeatherClosures.json`. `"schools"` is `"all"` or a list of
+  district names spelled as in the logs: `Indiana`, `Homer-Center`,
+  `Marion Center`, `Penns Manor`, `Purchase Line`, `United`. Built in:
+  Thanksgiving and the Friday after, Dec 24 - Jan 1, Good Friday, Easter Monday,
+  Memorial Day, Labor Day, and June 15 - Aug 15. A day off for every district is
+  neither forecast nor scored. A day off for one district is still forecast
+  (the others have school) but that district's result is set aside. Closures on
+  days off stay out of the weather history, and a day added later is removed
+  from the scorecard retroactively.
 - **Tests**: `npm test`
 - **Backtest**: `node scripts/backtest.js` replays the current model against
-  archived NWS alerts and airport observations. Run it before and after changing
-  a weight.
+  archived NWS alerts, archived NWS snow, ice and temperature forecasts for the
+  county airport, and the recorded school statuses. Run it before and after
+  changing a weight. Its header lists what it cannot tell you.

@@ -5,8 +5,10 @@
 const fs = require('fs');
 const path = require('path');
 const { calculateWindChill } = require('./noaa');
-const { predictAllDistricts, PREDICT_DISRUPTION_AT } = require('./schoolDelay');
+const { predictAllDistricts, summarizeCounty, scoreDisruption, INDIANA_COUNTY_SCHOOLS, PREDICT_DISRUPTION_AT } = require('./schoolDelay');
+const { withSavedAlerts } = require('./features');
 const { fetchForecastInputs } = require('./schoolForecast');
+const { getForecastOnFile } = require('./weatherLogger');
 const { easternParts, addDays, weekdayName } = require('./easternTime');
 const { getNonSchoolReason } = require('./schoolCalendar');
 
@@ -65,8 +67,10 @@ function placeholderDay(day, date, message, status = 'unknown') {
 }
 
 // Generate the weekly forecast with school predictions
-async function generateWeeklyForecast({ now = new Date() } = {}) {
-  const inputs = await fetchForecastInputs();
+//   deadlineMs  how long to wait for each NWS source (this runs inside a page
+//               request, which the host stops at about ten seconds)
+async function generateWeeklyForecast({ now = new Date(), deadlineMs = 7000 } = {}) {
+  const inputs = await fetchForecastInputs({ deadlineMs });
   const periods = inputs.forecast?.periods || [];
 
   if (periods.length === 0 && !Object.values(inputs.grids).some(Boolean)) {
@@ -92,7 +96,35 @@ async function generateWeeklyForecast({ now = new Date() } = {}) {
       continue;
     }
 
-    const { county, districts, noData } = predictAllDistricts(inputs, { now, targetDate: dateStr });
+    const onFile = getForecastOnFile(dateStr);
+
+    // Once this morning's buses have run there is nothing left to predict, and
+    // NWS has dropped the overnight hours and expired alerts from its feeds.
+    // Show the forecast that was on file for the morning, not a recalculation
+    // that would drift toward "quiet" as the day goes on.
+    const morningHasPassed = dateStr === today && easternParts(now).hour >= 9;
+    if (morningHasPassed && Object.keys(onFile).length === 0) {
+      days.push(placeholderDay(dayName, dateStr, 'Morning has passed'));
+      continue;
+    }
+
+    let county;
+    let districts;
+    let noData = false;
+    if (morningHasPassed) {
+      districts = INDIANA_COUNTY_SCHOOLS.filter(school => onFile[school.code]).map(school => {
+        const saved = onFile[school.code];
+        const features = {
+          ...saved,
+          targetDate: dateStr,
+          alerts: withSavedAlerts([], saved, new Date(now).getTime(), { feedDown: true })
+        };
+        return { school, features, ...scoreDisruption(features) };
+      });
+      county = summarizeCounty(districts);
+    } else {
+      ({ county, districts, noData } = predictAllDistricts(inputs, { now, targetDate: dateStr, onFile }));
+    }
     const { dayPeriod, nightBefore } = matchPeriodsToDate(periods, dateStr);
     const features = county.features;
 

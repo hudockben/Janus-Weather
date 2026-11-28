@@ -1,10 +1,24 @@
 const { getSchoolStatuses, riskTier, DISCLAIMER } = require('../_lib/schoolDelay');
-const { getSchoolForecast } = require('../_lib/schoolForecast');
+const { getSchoolForecast, withDeadline } = require('../_lib/schoolForecast');
 const { getPredictionAccuracy, getForecastOnFile } = require('../_lib/weatherLogger');
 const { easternParts, addDays, weekdayName } = require('../_lib/easternTime');
-const { getTargetSchoolDay } = require('../_lib/schoolCalendar');
+const { getTargetSchoolDay, getNonSchoolReason } = require('../_lib/schoolCalendar');
 
 const DISRUPTIONS = new Set(['closed', '2-hour delay', 'delayed', 'early dismissal', 'flexible instruction']);
+const CLOSURES = new Set(['closed', 'flexible instruction']);
+
+// Every outside source gets this long. The host stops a request at about ten
+// seconds, so a source that has not answered by then is treated as down.
+const SOURCE_DEADLINE_MS = 7000;
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+  'August', 'September', 'October', 'November', 'December'];
+
+// "Monday, January 4" from YYYY-MM-DD
+function longDate(dateStr) {
+  const [, month, day] = dateStr.split('-').map(Number);
+  return `${weekdayName(dateStr)}, ${MONTHS[month - 1]} ${day}`;
+}
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,16 +26,16 @@ module.exports = async (req, res) => {
 
   try {
     const now = new Date();
+    const today = easternParts(now).dateStr;
     const targetDate = getTargetSchoolDay(now);
 
     // Forecast for the next school morning, plus what the districts have posted
     const [forecast, schoolStatuses] = await Promise.all([
-      getSchoolForecast({ now, targetDate, onFile: getForecastOnFile(targetDate), deadlineMs: 7000 }),
-      getSchoolStatuses().catch(() => ({}))
+      getSchoolForecast({ now, targetDate, onFile: getForecastOnFile(targetDate), deadlineMs: SOURCE_DEADLINE_MS }),
+      withDeadline(getSchoolStatuses(), SOURCE_DEADLINE_MS).catch(() => ({}))
     ]);
 
     const { inputs, county, districts } = forecast;
-    const today = easternParts(now).dateStr;
 
     let targetLabel = weekdayName(targetDate);
     if (targetDate === today) targetLabel = 'This morning';
@@ -49,6 +63,27 @@ module.exports = async (req, res) => {
       };
     });
 
+    // What has already been posted for the forecast morning outranks any
+    // percentage: the headline must not say "normal schedule expected" above
+    // six announced delays.
+    const announcedSchools = schoolsWithStatus.filter(s => s.announced);
+    const announcements = announcedSchools.length === 0 ? null : {
+      total: announcedSchools.length,
+      closures: announcedSchools.filter(s => CLOSURES.has(s.announced)).length,
+      delays: announcedSchools.filter(s => !CLOSURES.has(s.announced)).length,
+      of: schoolsWithStatus.length
+    };
+
+    let status = county.status;
+    let recommendation = county.recommendation;
+    if (forecast.noData && forecast.noDataReason === 'beyond-range') {
+      status = 'unknown';
+      recommendation = `The next school day is ${longDate(targetDate)}, which is further out than the National Weather Service forecasts. A prediction will appear about a week before.`;
+    } else if (forecast.noData) {
+      status = 'unknown';
+      recommendation = 'Weather data from NOAA is unavailable right now, so no prediction can be made. Check back shortly.';
+    }
+
     // Get prediction accuracy stats
     const accuracy = getPredictionAccuracy();
 
@@ -68,15 +103,20 @@ module.exports = async (req, res) => {
           temp: p.temperature
         })) : null
       },
+      // Dates are Eastern, whatever time zone the viewer is in
+      today,
+      todayNoSchool: getNonSchoolReason(today),
       targetDate,
       targetLabel,
+      // True when nothing is known about the forecast morning; the numbers
+      // below are then placeholders, not a forecast of zero
+      noData: forecast.noData,
       probability: county.probability,
       delayProbability: county.delayProbability,
       closureProbability: county.closureProbability,
-      status: forecast.noData ? 'unknown' : county.status,
-      recommendation: forecast.noData
-        ? 'Weather data from NOAA is unavailable right now, so no prediction can be made. Check back shortly.'
-        : county.recommendation,
+      status,
+      recommendation,
+      announcements,
       // Set when something the forecast depends on could not be loaded
       notice: !forecast.noData && !inputs.alertsAvailable
         ? 'NWS alerts could not be loaded just now. Any alert shown is the last one on file; check weather.gov for current alerts.'

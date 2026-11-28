@@ -411,32 +411,59 @@ function renderSchoolDelay(data) {
     unknown: 'Prediction Unavailable'
   };
 
-  // The server names the school day being forecast: the next day school is in
-  // session, which skips weekends and breaks (Friday's forecast is for Monday).
-  const todayIso = localIsoDate(new Date());
-  const targetDay = data.targetDate ? new Date(data.targetDate + 'T12:00:00') : new Date(Date.now() + 86400000);
+  // The server names both dates, in Eastern time: today, and the school day
+  // being forecast (the next day school is in session, which skips weekends
+  // and breaks, so Friday's forecast is for Monday). Using the viewer's own
+  // clock here would mislabel the cards for anyone in another time zone.
+  const todayIso = data.today || localIsoDate(new Date());
+  const calendarDay = iso => new Date(iso + 'T12:00:00');
+  const targetDay = data.targetDate ? calendarDay(data.targetDate) : new Date(Date.now() + 86400000);
   const forecastDate = targetDay.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const targetRowLabel = (data.targetLabel || 'Tomorrow').toUpperCase();
 
   // Determine which probability is higher for styling
   const primaryType = data.closureProbability > data.delayProbability ? 'closure' : 'delay';
 
+  // With nothing known about that morning, or once every district has posted,
+  // there is no percentage worth showing
+  const everyonePosted = data.announcements && data.announcements.total === data.announcements.of;
+  const percent = value => (data.noData || everyonePosted ? '&ndash;' : `${value}%`);
+
+  // Districts that have already posted for the forecast morning come first:
+  // the headline must not promise a normal day above their announcements.
+  let headline = statusLabels[data.status] || data.status;
+  let headlineClass = data.status;
+  let recommendation = data.recommendation;
+  if (data.announcements) {
+    const a = data.announcements;
+    const when = data.targetLabel === 'This morning' ? 'this morning'
+      : data.targetLabel === 'Tomorrow' ? 'tomorrow' : (data.targetLabel || 'the next school day');
+    const posted = [
+      a.closures ? `${a.closures} ${a.closures === 1 ? 'closure' : 'closures'}` : '',
+      a.delays ? `${a.delays} ${a.delays === 1 ? 'delay' : 'delays'}` : ''
+    ].filter(Boolean).join(' and ');
+    headline = `${a.total} of ${a.of} districts have posted for ${when}`;
+    headlineClass = a.closures > 0 ? 'high' : 'moderate';
+    recommendation = `Posted so far: ${posted}. See each district below.` +
+      (a.total < a.of ? ' The percentages are the weather forecast for districts that have not posted.' : '');
+  }
+
   schoolDelayContainer.innerHTML = `
     <div class="delay-date">Forecast for ${forecastDate}</div>
     <div class="delay-status">
       <div class="delay-probabilities">
         <div class="delay-probability ${primaryType === 'delay' ? data.status : 'secondary'}">
-          <div class="percentage">${data.delayProbability}%</div>
+          <div class="percentage">${percent(data.delayProbability)}</div>
           <div class="label">Delay</div>
         </div>
         <div class="delay-probability ${primaryType === 'closure' ? data.status : 'secondary'}">
-          <div class="percentage">${data.closureProbability}%</div>
+          <div class="percentage">${percent(data.closureProbability)}</div>
           <div class="label">Closure</div>
         </div>
       </div>
       <div class="delay-info">
-        <div class="status-label ${data.status}">${statusLabels[data.status] || data.status}</div>
-        <div class="recommendation">${data.recommendation}</div>
+        <div class="status-label ${headlineClass}">${headline}</div>
+        <div class="recommendation">${recommendation}</div>
         ${data.notice ? `<div class="recommendation">${data.notice}</div>` : ''}
       </div>
     </div>
@@ -458,7 +485,7 @@ function renderSchoolDelay(data) {
               </li>
             `).join('')}
           </ul>
-        ` : '<p class="no-factors">No significant weather factors detected</p>'}
+        ` : `<p class="no-factors">${data.noData ? 'No forecast is available for this day yet' : 'No significant weather factors detected'}</p>`}
       </div>
     </div>
 
@@ -489,17 +516,18 @@ function renderSchoolDelay(data) {
 
     <div class="delay-schools">
       ${data.schools.map(s => {
-        const statusClass = getStatusClass(s.currentStatus);
-        const statusLabel = getStatusLabel(s.currentStatus);
         const riskTierLabel = getRiskTierLabel(s.riskTier);
-        const shortDate = d => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+        const shortDate = iso => calendarDay(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
 
         // The district's page says which day a posted delay or closure is for.
         // "Open" just means nothing is posted, which describes today.
         const postedForAnotherDay = s.statusDate && s.statusDate !== todayIso && s.currentStatus !== 'open';
-        const statusRowLabel = postedForAnotherDay
-          ? shortDate(new Date(s.statusDate + 'T12:00:00'))
-          : `TODAY ${shortDate(new Date())}`;
+        const statusRowLabel = postedForAnotherDay ? shortDate(s.statusDate) : `TODAY ${shortDate(todayIso)}`;
+
+        // On a weekend or holiday "nothing posted" does not mean school is open
+        const noSchoolToday = data.todayNoSchool && s.currentStatus === 'open';
+        const statusClass = noSchoolToday ? 'status-unknown' : getStatusClass(s.currentStatus);
+        const statusLabel = noSchoolToday ? 'No school' : getStatusLabel(s.currentStatus);
 
         return `
           <div class="school-card">
@@ -512,6 +540,8 @@ function renderSchoolDelay(data) {
               <span class="row-label">${targetRowLabel}:</span>
               ${s.announced ? `
                 <span class="school-current-status ${getStatusClass(s.announced)}">Announced: ${getStatusLabel(s.announced)}</span>
+              ` : data.noData ? `
+                <span class="school-current-status status-unknown">No forecast yet</span>
               ` : `
                 <span class="school-prob delay">${s.delayProbability}% delay</span>
                 <span class="school-prob closure">${s.closureProbability}% closure</span>

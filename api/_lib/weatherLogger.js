@@ -579,7 +579,10 @@ async function logWeatherData(options = {}) {
       });
 
       let saved = 0;
-      if (forecast.noData) {
+      if (forecast.noData && forecast.noDataReason === 'beyond-range') {
+        // Normal during a break: the next school day is more than a week out.
+        // Nothing to file until NWS forecasts reach it.
+      } else if (forecast.noData) {
         results.errors.push({
           type: 'no_weather_data',
           message: 'Could not fetch alerts or forecasts from NOAA; no forecast saved'
@@ -699,9 +702,9 @@ function tally(entries) {
 
 // Live forecasts that have a verified outcome worth scoring: not backtest
 // seeds, not non-school days, not closures unrelated to weather.
-function getScorableEntries(log = loadPredictionLog()) {
+function getScorableEntries(log = loadPredictionLog(), historicalData = loadHistoricalData()) {
   // Outcome records, to recognize non-weather closures among older entries
-  const history = new Map(loadHistoricalData().map(record =>
+  const history = new Map(historicalData.map(record =>
     [`${record.date}:${SCHOOL_NAME_FIXES[record.school] || record.school}`, record]));
 
   return log.filter(entry => {
@@ -715,20 +718,19 @@ function getScorableEntries(log = loadPredictionLog()) {
   });
 }
 
-// Get prediction accuracy stats
-function getPredictionAccuracy() {
-  let log;
+// Get prediction accuracy stats. The arguments exist for tests; the site
+// calls this with none and gets the real logs and today's date.
+function getPredictionAccuracy({ log, historicalData, today = easternParts().dateStr } = {}) {
   try {
-    log = loadPredictionLog();
-    loadHistoricalData();
+    log = log || loadPredictionLog();
+    historicalData = historicalData || loadHistoricalData();
   } catch (error) {
     // The page still has a forecast to show; the self-audit just has no data
     return { total: 0, correct: 0, accuracy: 0, status: 'no-data', pendingCount: 0, totalResolved: 0, error: error.message };
   }
-  const today = easternParts().dateStr;
 
   const live = log.filter(e => e.source !== 'backtest');
-  const scorable = getScorableEntries(log);
+  const scorable = getScorableEntries(log, historicalData);
   const pending = live.filter(e => e.actualStatus === null && e.date >= today);
 
   if (scorable.length === 0) {

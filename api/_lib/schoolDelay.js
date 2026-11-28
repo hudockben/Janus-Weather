@@ -87,12 +87,17 @@ let statusCache = {
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+// Kept short so that a status site that has stopped answering cannot hold a
+// page request past the host's time limit.
+const SCHOOLCAST_TIMEOUT_MS = 4000;
+const RADIO_TIMEOUT_MS = 2500;
+
 // Fetch school closings from ARIN IU28 SchoolCast (official source for Indiana County)
 async function checkSchoolCast() {
   try {
     const response = await fetch('https://schoolcast.iu28.org', {
       headers: { 'User-Agent': 'JanusForecastModel/1.0' },
-      signal: AbortSignal.timeout(8000)
+      signal: AbortSignal.timeout(SCHOOLCAST_TIMEOUT_MS)
     });
     if (!response.ok) return null;
     const html = await response.text();
@@ -103,26 +108,26 @@ async function checkSchoolCast() {
   }
 }
 
-// Fallback: fetch from local radio station closings pages
+// Fallback: fetch from local radio station closings pages (both at once; the
+// first listed that answers is used)
 async function checkLocalRadio() {
   const urls = [
     'https://www.wccsradio.com/?s=school+closings',
     'https://www.wdadradio.com/?s=school+closings'
   ];
-  for (const url of urls) {
+  const pages = await Promise.all(urls.map(async url => {
     try {
       const response = await fetch(url, {
         headers: { 'User-Agent': 'JanusForecastModel/1.0' },
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(RADIO_TIMEOUT_MS)
       });
-      if (!response.ok) continue;
-      const html = await response.text();
-      if (html) return html;
+      return response.ok ? await response.text() : null;
     } catch (error) {
       console.error(`Error fetching ${url}:`, error);
+      return null;
     }
-  }
-  return null;
+  }));
+  return pages.find(Boolean) || null;
 }
 
 // --- SchoolCast parsing --------------------------------------------------------
@@ -158,17 +163,23 @@ function findSchoolCastEntry(entries, schoolCode) {
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july',
   'august', 'september', 'october', 'november', 'december'];
 
-// Map SchoolCast's status label (plus any note under it) to our status names
+// Map SchoolCast's status label (plus any note under it) to our status names.
+//
+// The label decides. The note only turns a closure into a flexible instruction
+// day ("Closed" + "Flexible Instruction Day #2"); a delay whose note merely
+// mentions remote learning is still a delay.
 function classifyStatusText(statusText, detailText = '') {
   const status = (statusText || '').toLowerCase();
-  const everything = `${status} ${(detailText || '').toLowerCase()}`;
-  const remote = /flexible instruction|remote (learning|instruction)|virtual/;
+  const note = (detailText || '').toLowerCase();
+  const remote = /flexible instruction|remote (learning|instruction)|virtual (learning|instruction|day)/;
 
-  if (/^\s*(open|on time|normal)/.test(status)) return 'open';
-  if (remote.test(everything)) return 'flexible instruction';
-  if (/clos/.test(status)) return 'closed';
-  if (/delay/.test(status)) return /(2|two)[\s-]*h(ou)?r/.test(status) ? '2-hour delay' : 'delayed';
-  if (/dismiss/.test(status)) return 'early dismissal';
+  if (/dismiss|closing early|early (closing|closure|release)/.test(status)) return 'early dismissal';
+  if (/delay|hours? late|late (start|opening|arrival)/.test(status)) {
+    return /(2|two)[\s-]*h(ou)?rs?/.test(status) ? '2-hour delay' : 'delayed';
+  }
+  if (remote.test(status)) return 'flexible instruction';
+  if (/clos/.test(status)) return remote.test(note) ? 'flexible instruction' : 'closed';
+  if (/^\s*(open|on time|normal)\b/.test(status)) return 'open';
   return 'unknown';
 }
 
@@ -674,31 +685,10 @@ function calculateDelayProbability(currentConditions, forecast, hourlyForecast, 
   };
 }
 
-// Prediction for every district plus the county-wide summary.
-//
-//   inputs: { current, forecast, hourlyForecast, alerts, grids: { [code]: grid } }
-//   onFile: features saved earlier for this morning, by district code (optional)
-function predictAllDistricts(inputs, { now = new Date(), targetDate = getTargetSchoolDay(now), onFile = {} } = {}) {
-  const grids = inputs.grids || {};
-  const fallbackGrid = grids.IASD || Object.values(grids).find(Boolean) || null;
-
-  const districts = INDIANA_COUNTY_SCHOOLS.map(school => {
-    const features = buildFeatures({
-      targetDate,
-      grid: grids[school.code] || fallbackGrid,
-      forecast: inputs.forecast,
-      hourlyForecast: inputs.hourlyForecast,
-      alerts: inputs.alerts,
-      zones: school.zones,
-      current: inputs.current,
-      onFile: onFile[school.code],
-      alertsAvailable: inputs.alertsAvailable !== false,
-      now
-    });
-    return { school, features, ...scoreDisruption(features) };
-  });
-
-  // County summary: the average district.
+// County-wide summary of district forecasts: the average district, explained
+// as the county seat's factors plus one line for districts whose weather
+// differs (usually the ridges), so the impacts still sum to the total.
+function summarizeCounty(districts) {
   const average = key => districts.reduce((sum, d) => sum + d[key], 0) / districts.length;
   const probability = Math.round(average('probability'));
   const closureProbability = Math.min(probability, Math.round(average('closureProbability')));
@@ -724,24 +714,54 @@ function predictAllDistricts(inputs, { now = new Date(), targetDate = getTargetS
     });
   }
 
-  // True when there was nothing to base a forecast on (NWS unreachable)
-  const noData = !inputs.alertsAvailable && districts.every(d => d.features.source === 'none');
-
   return {
-    targetDate,
-    noData,
-    county: {
-      probability,
-      delayProbability,
-      closureProbability,
-      predictedDisruption: probability >= PREDICT_DISRUPTION_AT,
-      ...describeRisk(probability, delayProbability, closureProbability),
-      factors,
-      historicalMatch: districts[0].historicalMatch,
-      features: districts[0].features
-    },
-    districts
+    probability,
+    delayProbability,
+    closureProbability,
+    predictedDisruption: probability >= PREDICT_DISRUPTION_AT,
+    ...describeRisk(probability, delayProbability, closureProbability),
+    factors,
+    historicalMatch: districts[0].historicalMatch,
+    features: districts[0].features
   };
+}
+
+// Prediction for every district plus the county-wide summary.
+//
+//   inputs: { current, forecast, hourlyForecast, alerts, grids: { [code]: grid } }
+//   onFile: features saved earlier for this morning, by district code (optional)
+function predictAllDistricts(inputs, { now = new Date(), targetDate = getTargetSchoolDay(now), onFile = {} } = {}) {
+  const grids = inputs.grids || {};
+  const fallbackGrid = grids.IASD || Object.values(grids).find(Boolean) || null;
+
+  const districts = INDIANA_COUNTY_SCHOOLS.map(school => {
+    const features = buildFeatures({
+      targetDate,
+      grid: grids[school.code] || fallbackGrid,
+      forecast: inputs.forecast,
+      hourlyForecast: inputs.hourlyForecast,
+      alerts: inputs.alerts,
+      zones: school.zones,
+      current: inputs.current,
+      onFile: onFile[school.code],
+      alertsAvailable: inputs.alertsAvailable !== false,
+      now
+    });
+    return { school, features, ...scoreDisruption(features) };
+  });
+
+  const county = summarizeCounty(districts);
+
+  // True when nothing at all is known about that morning: no forecast numbers
+  // for any district and no alert. Either the school day is further out than
+  // NWS forecasts (about a week), or NWS could not be reached. A zero made of
+  // no information must never be shown or filed as "quiet".
+  const noData = districts.every(d => d.features.source === 'none' && d.features.alerts.length === 0);
+  const BEYOND_RANGE_HOURS = 6.5 * 24;
+  const noDataReason = !noData ? null
+    : (districts[0].features.leadHours > BEYOND_RANGE_HOURS ? 'beyond-range' : 'unavailable');
+
+  return { targetDate, noData, noDataReason, county, districts };
 }
 
 // Map school codes to names used in historical data
@@ -757,6 +777,7 @@ const SCHOOL_CODE_TO_HISTORICAL_NAME = {
 module.exports = {
   calculateDelayProbability,
   predictAllDistricts,
+  summarizeCounty,
   scoreDisruption,
   riskTier,
   getHistoricalPrediction,
