@@ -524,8 +524,9 @@ function renderSchoolDelay(data) {
         const postedForAnotherDay = s.statusDate && s.statusDate !== todayIso && s.currentStatus !== 'open';
         const statusRowLabel = postedForAnotherDay ? shortDate(s.statusDate) : `TODAY ${shortDate(todayIso)}`;
 
-        // On a weekend or holiday "nothing posted" does not mean school is open
-        const noSchoolToday = data.todayNoSchool && s.currentStatus === 'open';
+        // On a weekend, a holiday or the district's own day off, "nothing posted"
+        // does not mean school is open
+        const noSchoolToday = (data.todayNoSchool || s.noSchoolToday) && s.currentStatus === 'open';
         const statusClass = noSchoolToday ? 'status-unknown' : getStatusClass(s.currentStatus);
         const statusLabel = noSchoolToday ? 'No school' : getStatusLabel(s.currentStatus);
 
@@ -540,6 +541,8 @@ function renderSchoolDelay(data) {
               <span class="row-label">${targetRowLabel}:</span>
               ${s.announced ? `
                 <span class="school-current-status ${getStatusClass(s.announced)}">Announced: ${getStatusLabel(s.announced)}</span>
+              ` : s.noSchoolTarget ? `
+                <span class="school-current-status status-unknown" title="${s.noSchoolTarget}">No school</span>
               ` : data.noData ? `
                 <span class="school-current-status status-unknown">No forecast yet</span>
               ` : `

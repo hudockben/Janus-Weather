@@ -1,6 +1,6 @@
 const { getSchoolStatuses, riskTier, DISCLAIMER } = require('../_lib/schoolDelay');
 const { getSchoolForecast, withDeadline } = require('../_lib/schoolForecast');
-const { getPredictionAccuracy, getForecastOnFile } = require('../_lib/weatherLogger');
+const { getPredictionAccuracy, getForecastOnFile, SCHOOL_CODE_TO_NAME } = require('../_lib/weatherLogger');
 const { easternParts, addDays, weekdayName } = require('../_lib/easternTime');
 const { getTargetSchoolDay, getNonSchoolReason, tolerateBrokenCalendar } = require('../_lib/schoolCalendar');
 
@@ -61,8 +61,14 @@ module.exports = async (req, res) => {
       // morning is no longer a prediction
       const announced = posted.statusDate === targetDate && DISRUPTIONS.has(status) ? status : null;
 
+      // A district's own days off (in-service days, a longer break than its
+      // neighbors): no forecast applies to it that morning
+      const calendarName = SCHOOL_CODE_TO_NAME[district.school.code];
+
       return {
         ...district.school,
+        noSchoolToday: getNonSchoolReason(today, calendarName),
+        noSchoolTarget: getNonSchoolReason(targetDate, calendarName),
         currentStatus: status,
         statusSource: posted.source || 'unavailable',
         statusDate: posted.statusDate || null,

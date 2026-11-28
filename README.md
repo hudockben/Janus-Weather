@@ -84,6 +84,13 @@ days-off file below is the reliable way to keep a holiday out of the score.
   read, the logger stops and the workflow run fails (nothing is recorded with a
   calendar it cannot trust), while the site carries on with the built-in
   holidays and says so.
+
+  The file holds the 2026-27 days off for Homer-Center, Marion Center and
+  Purchase Line, taken from each district's published calendar (named in each
+  entry's `source`). Indiana, Penns Manor and United are not listed yet. Where
+  Homer-Center's two buildings differ, only days when both are off are listed.
+  Entries marked as snow make-up days are days off only until a district uses
+  them: when one is used to make up a snow day, delete that entry.
 - **Tests**: `npm test`
 - **Backtest**: `node scripts/backtest.js` replays the current model against
   archived NWS alerts, archived NWS snow, ice and temperature forecasts for the
